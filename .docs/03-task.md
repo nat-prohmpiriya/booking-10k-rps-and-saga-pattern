@@ -86,18 +86,18 @@
 
 ---
 
-### [ ]  P1-05: Shared Package - Logger
+### [x]  P1-05: Shared Package - Logger
 | Field | Value |
 |-------|-------|
 | **Description** | สร้าง structured JSON logger ด้วย Zap |
 | **Technical Context** | `pkg/logger/logger.go` |
 | **Acceptance Criteria** | - Log output เป็น JSON format<br>- มี fields: timestamp, level, service, trace_id<br>- Support log levels: DEBUG, INFO, WARN, ERROR |
 
-- [ ] Create Zap logger wrapper
-- [ ] Add structured fields (service, trace_id)
-- [ ] Implement log level configuration
-- [ ] Add context-aware logging
-- [ ] Write unit tests
+- [x] Create Zap logger wrapper
+- [x] Add structured fields (service, trace_id)
+- [x] Implement log level configuration
+- [x] Add context-aware logging
+- [x] Write unit tests
 
 ---
 
