@@ -103,6 +103,7 @@ func main() {
 			events.GET("", container.EventHandler.List)
 			events.GET("/:slug", container.EventHandler.GetBySlug)
 			events.GET("/id/:id", container.EventHandler.GetByID)
+			events.GET("/:slug/shows", container.ShowHandler.ListByEvent)
 
 			// Protected endpoints (Organizer/Admin only)
 			protected := events.Group("")
@@ -113,6 +114,23 @@ func main() {
 				protected.PUT("/:id", container.EventHandler.Update)
 				protected.DELETE("/:id", container.EventHandler.Delete)
 				protected.POST("/:id/publish", container.EventHandler.Publish)
+				protected.POST("/:id/shows", container.ShowHandler.Create)
+			}
+		}
+
+		// Shows endpoints - for direct show access
+		shows := v1.Group("/shows")
+		{
+			// Public endpoints
+			shows.GET("/:id", container.ShowHandler.GetByID)
+
+			// Protected endpoints (Organizer/Admin only)
+			protectedShows := shows.Group("")
+			protectedShows.Use(middleware.JWTMiddleware(jwtConfig))
+			protectedShows.Use(middleware.RequireRole("admin", "organizer"))
+			{
+				protectedShows.PUT("/:id", container.ShowHandler.Update)
+				protectedShows.DELETE("/:id", container.ShowHandler.Delete)
 			}
 		}
 

@@ -99,3 +99,17 @@ type TicketTypeRepository interface {
 	// Delete deletes a ticket type by ID
 	Delete(ctx context.Context, id string) error
 }
+
+// ShowRepository defines the interface for show data access
+type ShowRepository interface {
+	// Create creates a new show
+	Create(ctx context.Context, show *domain.Show) error
+	// GetByID retrieves a show by ID
+	GetByID(ctx context.Context, id string) (*domain.Show, error)
+	// GetByEventID retrieves shows by event ID with pagination
+	GetByEventID(ctx context.Context, eventID string, limit, offset int) ([]*domain.Show, int, error)
+	// Update updates a show
+	Update(ctx context.Context, show *domain.Show) error
+	// Delete soft deletes a show by ID
+	Delete(ctx context.Context, id string) error
+}

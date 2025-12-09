@@ -56,3 +56,17 @@ type VenueService interface {
 	// DeleteVenue deletes a venue
 	DeleteVenue(ctx context.Context, id string) error
 }
+
+// ShowService defines the interface for show business logic
+type ShowService interface {
+	// CreateShow creates a new show for an event
+	CreateShow(ctx context.Context, req *dto.CreateShowRequest) (*domain.Show, error)
+	// GetShowByID retrieves a show by ID
+	GetShowByID(ctx context.Context, id string) (*domain.Show, error)
+	// ListShowsByEvent lists shows for an event
+	ListShowsByEvent(ctx context.Context, eventID string, filter *dto.ShowListFilter) ([]*domain.Show, int, error)
+	// UpdateShow updates a show
+	UpdateShow(ctx context.Context, id string, req *dto.UpdateShowRequest) (*domain.Show, error)
+	// DeleteShow soft deletes a show
+	DeleteShow(ctx context.Context, id string) error
+}

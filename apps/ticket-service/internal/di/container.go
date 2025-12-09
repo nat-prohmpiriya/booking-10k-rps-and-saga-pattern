@@ -15,18 +15,21 @@ type Container struct {
 	// Repositories
 	EventRepo repository.EventRepository
 	VenueRepo repository.VenueRepository
+	ShowRepo  repository.ShowRepository
 	// ZoneRepo       repository.ZoneRepository
 	// SeatRepo       repository.SeatRepository
 	// TicketTypeRepo repository.TicketTypeRepository
 
 	// Services
 	EventService service.EventService
+	ShowService  service.ShowService
 	// TicketService service.TicketService
 	// VenueService  service.VenueService
 
 	// Handlers
 	HealthHandler *handler.HealthHandler
 	EventHandler  *handler.EventHandler
+	ShowHandler   *handler.ShowHandler
 	// TicketHandler *handler.TicketHandler
 	// VenueHandler  *handler.VenueHandler
 }
@@ -45,18 +48,21 @@ func NewContainer(cfg *ContainerConfig) *Container {
 	// Initialize repositories
 	c.EventRepo = repository.NewPostgresEventRepository(c.DB.Pool())
 	c.VenueRepo = repository.NewPostgresVenueRepository(c.DB.Pool())
+	c.ShowRepo = repository.NewPostgresShowRepository(c.DB.Pool())
 	// c.ZoneRepo = repository.NewPostgresZoneRepository(c.DB.Pool())
 	// c.SeatRepo = repository.NewPostgresSeatRepository(c.DB.Pool())
 	// c.TicketTypeRepo = repository.NewPostgresTicketTypeRepository(c.DB.Pool())
 
 	// Initialize services
 	c.EventService = service.NewEventService(c.EventRepo, c.VenueRepo)
+	c.ShowService = service.NewShowService(c.ShowRepo, c.EventRepo)
 	// c.TicketService = service.NewTicketService(c.TicketTypeRepo, c.EventRepo)
 	// c.VenueService = service.NewVenueService(c.VenueRepo, c.ZoneRepo, c.SeatRepo)
 
 	// Initialize handlers
 	c.HealthHandler = handler.NewHealthHandler(c.DB)
 	c.EventHandler = handler.NewEventHandler(c.EventService)
+	c.ShowHandler = handler.NewShowHandler(c.ShowService, c.EventService)
 	// c.TicketHandler = handler.NewTicketHandler(c.TicketService)
 	// c.VenueHandler = handler.NewVenueHandler(c.VenueService)
 

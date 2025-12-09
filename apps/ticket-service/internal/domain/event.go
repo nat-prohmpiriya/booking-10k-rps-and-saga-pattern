@@ -104,3 +104,24 @@ func (t *TicketType) IsAvailable() bool {
 		now.After(t.SaleStartTime) &&
 		now.Before(t.SaleEndTime)
 }
+
+// Show represents a specific showing/performance of an event
+type Show struct {
+	ID        string     `json:"id"`
+	EventID   string     `json:"event_id"`
+	Name      string     `json:"name"`      // e.g. "Evening Show", "Matinee"
+	StartTime time.Time  `json:"start_time"`
+	EndTime   time.Time  `json:"end_time"`
+	Status    string     `json:"status"` // scheduled, ongoing, completed, cancelled
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+}
+
+// ShowStatus constants
+const (
+	ShowStatusScheduled = "scheduled"
+	ShowStatusOngoing   = "ongoing"
+	ShowStatusCompleted = "completed"
+	ShowStatusCancelled = "cancelled"
+)

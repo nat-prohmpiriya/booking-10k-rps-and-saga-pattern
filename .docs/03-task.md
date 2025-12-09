@@ -623,18 +623,18 @@
 
 ---
 
-### [ ]  P3-10: Ticket Service - Show Management
+### [x]  P3-10: Ticket Service - Show Management
 | Field | Value |
 |-------|-------|
 | **Description** | Implement Show management |
 | **Technical Context** | `apps/ticket-service/internal/handler/show_handler.go` |
 | **Acceptance Criteria** | - `GET /events/:slug/shows` lists shows<br>- `POST /events/:id/shows` creates show |
 
-- [ ] Create Show domain model
-- [ ] Implement ShowRepository
-- [ ] Implement list shows for event
-- [ ] Implement create show
-- [ ] Write tests
+- [x] Create Show domain model
+- [x] Implement ShowRepository
+- [x] Implement list shows for event
+- [x] Implement create show
+- [x] Write tests
 
 ---
 
