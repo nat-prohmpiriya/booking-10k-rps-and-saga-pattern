@@ -1,0 +1,160 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/prohmpiriya/booking-rush-10k-rps/apps/ticket-service/internal/di"
+	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/config"
+	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/database"
+	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/logger"
+)
+
+func main() {
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Initialize logger
+	logCfg := &logger.Config{
+		Level:       cfg.App.Environment,
+		ServiceName: "ticket-service",
+		Development: cfg.IsDevelopment(),
+	}
+	if err := logger.Init(logCfg); err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	defer logger.Sync()
+
+	appLog := logger.Get()
+	appLog.Info("Starting Ticket Service...")
+
+	ctx := context.Background()
+
+	// Initialize database connection
+	var db *database.PostgresDB
+	dbCfg := &database.PostgresConfig{
+		Host:            cfg.Database.Host,
+		Port:            cfg.Database.Port,
+		User:            cfg.Database.User,
+		Password:        cfg.Database.Password,
+		Database:        cfg.Database.DBName,
+		SSLMode:         cfg.Database.SSLMode,
+		MaxConns:        50,
+		MinConns:        10,
+		MaxConnLifetime: 30 * time.Minute,
+		MaxConnIdleTime: 5 * time.Minute,
+		ConnectTimeout:  5 * time.Second,
+		MaxRetries:      3,
+		RetryInterval:   1 * time.Second,
+	}
+	db, err = database.NewPostgres(ctx, dbCfg)
+	if err != nil {
+		appLog.Fatal(fmt.Sprintf("Database connection failed: %v", err))
+	}
+	defer db.Close()
+	appLog.Info(fmt.Sprintf("Database connected (pool: min=%d, max=%d)", dbCfg.MinConns, dbCfg.MaxConns))
+
+	// Build dependency injection container
+	container := di.NewContainer(&di.ContainerConfig{
+		DB: db,
+	})
+
+	// Setup Gin
+	if cfg.IsDevelopment() {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.New()
+	router.Use(gin.Recovery())
+
+	// Health check endpoints
+	router.GET("/health", container.HealthHandler.Health)
+	router.GET("/ready", container.HealthHandler.Ready)
+
+	// API routes
+	v1 := router.Group("/api/v1")
+	{
+		// Events endpoints (to be implemented)
+		_ = v1.Group("/events")
+		// {
+		// 	events.GET("", container.EventHandler.List)
+		// 	events.GET("/:id", container.EventHandler.Get)
+		// 	events.POST("", container.EventHandler.Create)
+		// 	events.PUT("/:id", container.EventHandler.Update)
+		// 	events.DELETE("/:id", container.EventHandler.Delete)
+		// 	events.POST("/:id/publish", container.EventHandler.Publish)
+		// }
+
+		// Tickets endpoints (to be implemented)
+		_ = v1.Group("/tickets")
+		// {
+		// 	tickets.GET("/types/:eventId", container.TicketHandler.GetByEvent)
+		// 	tickets.GET("/types/:id", container.TicketHandler.GetType)
+		// 	tickets.POST("/types", container.TicketHandler.CreateType)
+		// 	tickets.PUT("/types/:id", container.TicketHandler.UpdateType)
+		// 	tickets.DELETE("/types/:id", container.TicketHandler.DeleteType)
+		// 	tickets.POST("/availability", container.TicketHandler.CheckAvailability)
+		// }
+
+		// Venues endpoints (to be implemented)
+		_ = v1.Group("/venues")
+		// {
+		// 	venues.GET("", container.VenueHandler.List)
+		// 	venues.GET("/:id", container.VenueHandler.Get)
+		// 	venues.POST("", container.VenueHandler.Create)
+		// 	venues.PUT("/:id", container.VenueHandler.Update)
+		// 	venues.DELETE("/:id", container.VenueHandler.Delete)
+		// }
+	}
+
+	// Create HTTP server
+	port := cfg.Server.Port
+	if port == 0 {
+		port = 8082 // Default port for ticket-service
+	}
+	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, port)
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           router,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		ReadHeaderTimeout: 2 * time.Second,
+	}
+
+	// Start server in goroutine
+	go func() {
+		appLog.Info(fmt.Sprintf("Ticket Service listening on %s", addr))
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			appLog.Fatal(fmt.Sprintf("Failed to start server: %v", err))
+		}
+	}()
+
+	// Wait for interrupt signal for graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	appLog.Info("Shutting down server...")
+
+	// Give outstanding requests 30 seconds to complete
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		appLog.Fatal(fmt.Sprintf("Server forced to shutdown: %v", err))
+	}
+
+	appLog.Info("Server exited gracefully")
+}

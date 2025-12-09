@@ -590,17 +590,17 @@
 
 ---
 
-### [ ]  P3-08: Ticket Service - Project Structure
+### [x]  P3-08: Ticket Service - Project Structure
 | Field | Value |
 |-------|-------|
 | **Description** | Setup Ticket Service structure |
 | **Technical Context** | `apps/ticket-service/internal/` |
 | **Acceptance Criteria** | - Clean Architecture layers<br>- Service starts on :8082<br>- Health check works |
 
-- [ ] Create project structure
-- [ ] Setup dependency injection
-- [ ] Create `main.go`
-- [ ] Add health check endpoint
+- [x] Create project structure
+- [x] Setup dependency injection
+- [x] Create `main.go`
+- [x] Add health check endpoint
 
 ---
 
