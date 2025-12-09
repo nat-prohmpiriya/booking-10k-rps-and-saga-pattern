@@ -23,8 +23,8 @@ func NewPostgresUserRepository(pool *pgxpool.Pool) *PostgresUserRepository {
 // Create creates a new user
 func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User) error {
 	query := `
-		INSERT INTO users (id, email, password_hash, name, role, is_active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO users (id, email, password_hash, name, role, tenant_id, is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 	_, err := r.pool.Exec(ctx, query,
 		user.ID,
@@ -32,6 +32,7 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User) 
 		user.PasswordHash,
 		user.Name,
 		user.Role,
+		user.TenantID,
 		user.IsActive,
 		user.CreatedAt,
 		user.UpdatedAt,
@@ -42,7 +43,7 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User) 
 // GetByID retrieves a user by ID
 func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, name, role, is_active, created_at, updated_at
+		SELECT id, email, password_hash, name, role, tenant_id, is_active, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
@@ -53,6 +54,7 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 		&user.PasswordHash,
 		&user.Name,
 		&user.Role,
+		&user.TenantID,
 		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -69,7 +71,7 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 // GetByEmail retrieves a user by email
 func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, name, role, is_active, created_at, updated_at
+		SELECT id, email, password_hash, name, role, tenant_id, is_active, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`
@@ -80,6 +82,7 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 		&user.PasswordHash,
 		&user.Name,
 		&user.Role,
+		&user.TenantID,
 		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -97,7 +100,7 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 func (r *PostgresUserRepository) Update(ctx context.Context, user *domain.User) error {
 	query := `
 		UPDATE users
-		SET email = $2, password_hash = $3, name = $4, role = $5, is_active = $6, updated_at = $7
+		SET email = $2, password_hash = $3, name = $4, role = $5, tenant_id = $6, is_active = $7, updated_at = $8
 		WHERE id = $1
 	`
 	user.UpdatedAt = time.Now()
@@ -107,6 +110,7 @@ func (r *PostgresUserRepository) Update(ctx context.Context, user *domain.User) 
 		user.PasswordHash,
 		user.Name,
 		user.Role,
+		user.TenantID,
 		user.IsActive,
 		user.UpdatedAt,
 	)

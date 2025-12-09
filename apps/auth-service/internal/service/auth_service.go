@@ -277,10 +277,17 @@ func (s *authService) ValidateToken(ctx context.Context, tokenString string) (*d
 		return nil, ErrInvalidToken
 	}
 
+	// Extract tenant_id safely (might be nil or empty)
+	tenantID := ""
+	if tid, ok := claims["tenant_id"].(string); ok {
+		tenantID = tid
+	}
+
 	return &domain.Claims{
-		UserID: claims["user_id"].(string),
-		Email:  claims["email"].(string),
-		Role:   domain.Role(claims["role"].(string)),
+		UserID:   claims["user_id"].(string),
+		Email:    claims["email"].(string),
+		Role:     domain.Role(claims["role"].(string)),
+		TenantID: tenantID,
 	}, nil
 }
 
@@ -293,11 +300,13 @@ func (s *authService) GetUser(ctx context.Context, id string) (*domain.User, err
 func (s *authService) generateTokenPair(user *domain.User) (*domain.TokenPair, error) {
 	// Generate access token
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": user.ID,
-		"email":   user.Email,
-		"role":    string(user.Role),
-		"exp":     time.Now().Add(s.config.AccessTokenExpiry).Unix(),
-		"iat":     time.Now().Unix(),
+		"sub":       user.ID, // Standard JWT subject claim
+		"user_id":   user.ID,
+		"email":     user.Email,
+		"role":      string(user.Role),
+		"tenant_id": user.TenantID,
+		"exp":       time.Now().Add(s.config.AccessTokenExpiry).Unix(),
+		"iat":       time.Now().Unix(),
 	})
 
 	accessTokenString, err := accessToken.SignedString([]byte(s.config.JWTSecret))

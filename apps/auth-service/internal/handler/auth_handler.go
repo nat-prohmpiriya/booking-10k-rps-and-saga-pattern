@@ -203,8 +203,9 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response.Success(gin.H{
-		"user_id": claims.UserID,
-		"email":   claims.Email,
-		"role":    claims.Role,
+		"user_id":   claims.UserID,
+		"email":     claims.Email,
+		"role":      claims.Role,
+		"tenant_id": claims.TenantID,
 	}))
 }

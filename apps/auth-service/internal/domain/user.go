@@ -19,6 +19,7 @@ type User struct {
 	PasswordHash string    `json:"-"` // Never serialize password
 	Name         string    `json:"name"`
 	Role         Role      `json:"role"`
+	TenantID     string    `json:"tenant_id"` // For multi-tenant support
 	IsActive     bool      `json:"is_active"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
@@ -44,7 +45,8 @@ type TokenPair struct {
 
 // Claims represents JWT claims
 type Claims struct {
-	UserID string `json:"user_id"`
-	Email  string `json:"email"`
-	Role   Role   `json:"role"`
+	UserID   string `json:"user_id"`
+	Email    string `json:"email"`
+	Role     Role   `json:"role"`
+	TenantID string `json:"tenant_id"`
 }

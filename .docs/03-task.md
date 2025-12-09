@@ -517,19 +517,19 @@
 
 ---
 
-### [ ]  P3-03: Auth Service - Login & JWT
+### [x]  P3-03: Auth Service - Login & JWT
 | Field | Value |
 |-------|-------|
 | **Description** | Implement login with JWT |
 | **Technical Context** | `apps/auth-service/internal/service/auth_service.go` |
 | **Acceptance Criteria** | - `POST /auth/login` returns access + refresh token<br>- Access token: 15 min expiry<br>- Refresh token: 7 days expiry<br>- JWT contains: sub, email, role, tenant_id |
 
-- [ ] Implement password verification
-- [ ] Implement JWT generation (access token)
-- [ ] Implement refresh token generation
-- [ ] Store refresh token in DB
-- [ ] Create login handler
-- [ ] Write tests
+- [x] Implement password verification
+- [x] Implement JWT generation (access token)
+- [x] Implement refresh token generation
+- [x] Store refresh token in DB
+- [x] Create login handler
+- [x] Write tests
 
 ---
 

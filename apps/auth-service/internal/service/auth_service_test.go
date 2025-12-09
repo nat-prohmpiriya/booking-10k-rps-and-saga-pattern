@@ -439,6 +439,132 @@ func TestAuthService_Logout(t *testing.T) {
 	})
 }
 
+func TestJWTClaimsContainTenantID(t *testing.T) {
+	userRepo := newMockUserRepository()
+	sessionRepo := newMockSessionRepository()
+	config := &AuthServiceConfig{
+		JWTSecret:          "test-secret-key",
+		AccessTokenExpiry:  15 * time.Minute,
+		RefreshTokenExpiry: 7 * 24 * time.Hour,
+		BcryptCost:         10,
+	}
+	svc := NewAuthService(userRepo, sessionRepo, config)
+
+	// Create user with tenant_id
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("Password1!"), 10)
+	testUser := &domain.User{
+		ID:           "tenant-user-id",
+		Email:        "tenant@example.com",
+		PasswordHash: string(hashedPassword),
+		Name:         "Tenant Test",
+		Role:         domain.RoleUser,
+		TenantID:     "tenant-123",
+		IsActive:     true,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	userRepo.users[testUser.ID] = testUser
+	userRepo.emailIndex[testUser.Email] = testUser
+
+	// Login to get token with tenant_id
+	loginReq := &dto.LoginRequest{
+		Email:    "tenant@example.com",
+		Password: "Password1!",
+	}
+	loginResp, err := svc.Login(context.Background(), loginReq, "Test-Agent", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+
+	// Validate token and check tenant_id
+	claims, err := svc.ValidateToken(context.Background(), loginResp.AccessToken)
+	if err != nil {
+		t.Fatalf("ValidateToken() error = %v", err)
+	}
+
+	if claims.TenantID != "tenant-123" {
+		t.Errorf("ValidateToken() TenantID = %v, want tenant-123", claims.TenantID)
+	}
+	if claims.UserID != testUser.ID {
+		t.Errorf("ValidateToken() UserID = %v, want %v", claims.UserID, testUser.ID)
+	}
+	if claims.Email != testUser.Email {
+		t.Errorf("ValidateToken() Email = %v, want %v", claims.Email, testUser.Email)
+	}
+	if claims.Role != domain.RoleUser {
+		t.Errorf("ValidateToken() Role = %v, want %v", claims.Role, domain.RoleUser)
+	}
+}
+
+func TestTokenExpiry(t *testing.T) {
+	userRepo := newMockUserRepository()
+	sessionRepo := newMockSessionRepository()
+	config := &AuthServiceConfig{
+		JWTSecret:          "test-secret-key",
+		AccessTokenExpiry:  15 * time.Minute,
+		RefreshTokenExpiry: 7 * 24 * time.Hour,
+		BcryptCost:         10,
+	}
+	svc := NewAuthService(userRepo, sessionRepo, config)
+
+	t.Run("access token expires in 15 minutes", func(t *testing.T) {
+		regReq := &dto.RegisterRequest{
+			Email:    "expiry@example.com",
+			Password: "Password1!",
+			Name:     "Expiry Test",
+		}
+		resp, err := svc.Register(context.Background(), regReq)
+		if err != nil {
+			t.Fatalf("Register() error = %v", err)
+		}
+
+		// ExpiresIn should be around 15 minutes (900 seconds)
+		expectedExpiry := int64(15 * 60) // 900 seconds
+		if resp.ExpiresIn != expectedExpiry {
+			t.Errorf("ExpiresIn = %d, want %d", resp.ExpiresIn, expectedExpiry)
+		}
+	})
+
+	t.Run("refresh token expires in 7 days", func(t *testing.T) {
+		// Create user and login to get session
+		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("Password1!"), 10)
+		testUser := &domain.User{
+			ID:           "expiry-user-id",
+			Email:        "expiry2@example.com",
+			PasswordHash: string(hashedPassword),
+			Name:         "Expiry Test 2",
+			Role:         domain.RoleUser,
+			IsActive:     true,
+			CreatedAt:    time.Now(),
+			UpdatedAt:    time.Now(),
+		}
+		userRepo.users[testUser.ID] = testUser
+		userRepo.emailIndex[testUser.Email] = testUser
+
+		loginReq := &dto.LoginRequest{
+			Email:    "expiry2@example.com",
+			Password: "Password1!",
+		}
+		_, err := svc.Login(context.Background(), loginReq, "Test-Agent", "127.0.0.1")
+		if err != nil {
+			t.Fatalf("Login() error = %v", err)
+		}
+
+		// Check session expiry is around 7 days from now
+		sessions := sessionRepo.userSessions[testUser.ID]
+		if len(sessions) == 0 {
+			t.Fatal("No sessions created")
+		}
+
+		session := sessions[0]
+		expectedExpiry := time.Now().Add(7 * 24 * time.Hour)
+		diff := session.ExpiresAt.Sub(expectedExpiry)
+		if diff < -time.Second || diff > time.Second {
+			t.Errorf("Session ExpiresAt = %v, expected around %v", session.ExpiresAt, expectedExpiry)
+		}
+	})
+}
+
 func TestBcryptCost(t *testing.T) {
 	userRepo := newMockUserRepository()
 	sessionRepo := newMockSessionRepository()
