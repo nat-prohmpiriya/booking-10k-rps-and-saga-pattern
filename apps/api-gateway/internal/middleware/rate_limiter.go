@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,6 +20,36 @@ type RateLimitConfig struct {
 	RequestsPerSecond int
 	// Burst size (token bucket capacity)
 	BurstSize int
+	// Whether to use Redis for distributed rate limiting
+	UseRedis bool
+	// Redis client (required if UseRedis is true)
+	RedisClient *pkgredis.Client
+	// Key prefix for Redis
+	KeyPrefix string
+	// Cleanup interval for local rate limiter
+	CleanupInterval time.Duration
+	// Entry TTL for local rate limiter
+	EntryTTL time.Duration
+}
+
+// EndpointRateLimitConfig holds per-endpoint rate limiting configuration
+type EndpointRateLimitConfig struct {
+	// Path pattern (supports wildcards: /api/v1/*, /api/v1/events/:id)
+	PathPattern string
+	// HTTP methods this config applies to (empty = all methods)
+	Methods []string
+	// Rate limit per second per IP
+	RequestsPerSecond int
+	// Burst size (token bucket capacity)
+	BurstSize int
+}
+
+// PerEndpointRateLimitConfig holds configuration for per-endpoint rate limiting
+type PerEndpointRateLimitConfig struct {
+	// Default rate limit for endpoints not in the list
+	Default RateLimitConfig
+	// Per-endpoint configurations (checked in order, first match wins)
+	Endpoints []EndpointRateLimitConfig
 	// Whether to use Redis for distributed rate limiting
 	UseRedis bool
 	// Redis client (required if UseRedis is true)
@@ -76,6 +107,12 @@ func NewLocalRateLimiter(config RateLimitConfig) *LocalRateLimiter {
 
 // Allow checks if a request should be allowed
 func (rl *LocalRateLimiter) Allow(key string) bool {
+	allowed, _ := rl.AllowWithRemaining(key)
+	return allowed
+}
+
+// AllowWithRemaining checks if a request should be allowed and returns remaining tokens
+func (rl *LocalRateLimiter) AllowWithRemaining(key string) (bool, float64) {
 	now := time.Now()
 
 	// Get or create entry
@@ -98,11 +135,11 @@ func (rl *LocalRateLimiter) Allow(key string) bool {
 	if e.tokens >= 1 {
 		e.tokens--
 		atomic.AddUint64(&rl.totalAllowed, 1)
-		return true
+		return true, e.tokens
 	}
 
 	atomic.AddUint64(&rl.totalRejected, 1)
-	return false
+	return false, e.tokens
 }
 
 // GetStats returns rate limiter statistics
@@ -184,30 +221,46 @@ end
 
 // Allow checks if a request should be allowed using Redis
 func (rl *RedisRateLimiter) Allow(ctx context.Context, key string) (bool, error) {
+	allowed, _, err := rl.AllowWithRemaining(ctx, key, rl.config.RequestsPerSecond, rl.config.BurstSize)
+	return allowed, err
+}
+
+// AllowWithRemaining checks if a request should be allowed and returns remaining tokens
+func (rl *RedisRateLimiter) AllowWithRemaining(ctx context.Context, key string, rps, burst int) (bool, float64, error) {
 	now := float64(time.Now().UnixNano()) / 1e9
 
 	result := rl.config.RedisClient.Eval(ctx, rl.script,
 		[]string{rl.config.KeyPrefix + key},
-		float64(rl.config.RequestsPerSecond),
-		float64(rl.config.BurstSize),
+		float64(rps),
+		float64(burst),
 		now,
 	)
 
 	if result.Err() != nil {
-		return false, result.Err()
+		return false, 0, result.Err()
 	}
 
 	values, err := result.Slice()
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
 
-	if len(values) < 1 {
-		return false, fmt.Errorf("unexpected result length")
+	if len(values) < 2 {
+		return false, 0, fmt.Errorf("unexpected result length: %d", len(values))
 	}
 
 	allowed, _ := values[0].(int64)
-	return allowed == 1, nil
+	remaining := float64(0)
+	switch v := values[1].(type) {
+	case int64:
+		remaining = float64(v)
+	case float64:
+		remaining = v
+	case string:
+		remaining, _ = strconv.ParseFloat(v, 64)
+	}
+
+	return allowed == 1, remaining, nil
 }
 
 // RateLimiter creates a rate limiting middleware
@@ -353,4 +406,230 @@ func min(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+// DefaultPerEndpointConfig returns sensible defaults for per-endpoint rate limiting
+func DefaultPerEndpointConfig() PerEndpointRateLimitConfig {
+	return PerEndpointRateLimitConfig{
+		Default: RateLimitConfig{
+			RequestsPerSecond: 1000,
+			BurstSize:         100,
+		},
+		Endpoints: []EndpointRateLimitConfig{
+			// Critical booking endpoints - stricter limits
+			{
+				PathPattern:       "/api/v1/bookings",
+				Methods:           []string{"POST"},
+				RequestsPerSecond: 100,
+				BurstSize:         20,
+			},
+			{
+				PathPattern:       "/api/v1/bookings/*/confirm",
+				Methods:           []string{"POST"},
+				RequestsPerSecond: 50,
+				BurstSize:         10,
+			},
+			// Read-heavy endpoints - more generous limits
+			{
+				PathPattern:       "/api/v1/events",
+				Methods:           []string{"GET"},
+				RequestsPerSecond: 2000,
+				BurstSize:         200,
+			},
+			{
+				PathPattern:       "/api/v1/events/*",
+				Methods:           []string{"GET"},
+				RequestsPerSecond: 2000,
+				BurstSize:         200,
+			},
+			// Auth endpoints - moderate limits
+			{
+				PathPattern:       "/api/v1/auth/*",
+				Methods:           []string{"POST"},
+				RequestsPerSecond: 20,
+				BurstSize:         5,
+			},
+		},
+		KeyPrefix:       "ratelimit:",
+		CleanupInterval: time.Minute,
+		EntryTTL:        time.Minute,
+	}
+}
+
+// matchPath checks if a request path matches a pattern
+// Supports wildcards: * matches any segment, ** matches any number of segments
+func matchPath(pattern, path string) bool {
+	// Exact match
+	if pattern == path {
+		return true
+	}
+
+	patternParts := strings.Split(strings.Trim(pattern, "/"), "/")
+	pathParts := strings.Split(strings.Trim(path, "/"), "/")
+
+	pi := 0 // pattern index
+	for i := 0; i < len(pathParts); i++ {
+		if pi >= len(patternParts) {
+			return false
+		}
+
+		patternPart := patternParts[pi]
+
+		// ** matches any remaining path
+		if patternPart == "**" {
+			return true
+		}
+
+		// * matches any single segment
+		if patternPart == "*" {
+			pi++
+			continue
+		}
+
+		// :param matches any single segment (Gin-style parameter)
+		if strings.HasPrefix(patternPart, ":") {
+			pi++
+			continue
+		}
+
+		// Exact segment match
+		if patternPart != pathParts[i] {
+			return false
+		}
+		pi++
+	}
+
+	// Check if we've matched the entire pattern
+	return pi == len(patternParts)
+}
+
+// containsMethod checks if a method is in the list (empty list matches all)
+func containsMethod(methods []string, method string) bool {
+	if len(methods) == 0 {
+		return true
+	}
+	for _, m := range methods {
+		if strings.EqualFold(m, method) {
+			return true
+		}
+	}
+	return false
+}
+
+// findEndpointConfig finds the matching endpoint configuration
+func (c *PerEndpointRateLimitConfig) findEndpointConfig(method, path string) (int, int) {
+	for _, endpoint := range c.Endpoints {
+		if matchPath(endpoint.PathPattern, path) && containsMethod(endpoint.Methods, method) {
+			return endpoint.RequestsPerSecond, endpoint.BurstSize
+		}
+	}
+	return c.Default.RequestsPerSecond, c.Default.BurstSize
+}
+
+// PerEndpointRateLimiter creates a middleware with per-endpoint rate limiting
+func PerEndpointRateLimiter(config PerEndpointRateLimitConfig) gin.HandlerFunc {
+	var localLimiters sync.Map  // map[string]*LocalRateLimiter for different rate configs
+	var redisLimiter *RedisRateLimiter
+
+	if config.UseRedis && config.RedisClient != nil {
+		// For Redis, we use a single limiter but adjust the key to include rate info
+		redisLimiter = NewRedisRateLimiter(RateLimitConfig{
+			RedisClient: config.RedisClient,
+			KeyPrefix:   config.KeyPrefix,
+		})
+	}
+
+	// getLimiter returns or creates a local rate limiter for the given rate config
+	getLimiter := func(rps, burst int) *LocalRateLimiter {
+		key := fmt.Sprintf("%d:%d", rps, burst)
+		if limiter, ok := localLimiters.Load(key); ok {
+			return limiter.(*LocalRateLimiter)
+		}
+		limiter := NewLocalRateLimiter(RateLimitConfig{
+			RequestsPerSecond: rps,
+			BurstSize:         burst,
+			CleanupInterval:   config.CleanupInterval,
+			EntryTTL:          config.EntryTTL,
+		})
+		actual, _ := localLimiters.LoadOrStore(key, limiter)
+		return actual.(*LocalRateLimiter)
+	}
+
+	return func(c *gin.Context) {
+		path := c.FullPath() // Use registered path pattern instead of actual path
+		if path == "" {
+			path = c.Request.URL.Path
+		}
+		method := c.Request.Method
+
+		// Get rate limit config for this endpoint
+		rps, burst := config.findEndpointConfig(method, path)
+
+		// Skip rate limiting if unlimited
+		if rps <= 0 {
+			c.Next()
+			return
+		}
+
+		// Get client IP as rate limit key
+		clientIP := c.ClientIP()
+
+		var allowed bool
+		var remainingTokens float64
+
+		if redisLimiter != nil {
+			// For Redis, include the rate config in the key for per-endpoint limits
+			redisKey := fmt.Sprintf("%s:%d:%d", clientIP, rps, burst)
+			var err error
+			allowed, remainingTokens, err = redisLimiter.AllowWithRemaining(c.Request.Context(), redisKey, rps, burst)
+			if err != nil {
+				// Fallback to allowing on Redis errors (fail open)
+				allowed = true
+				remainingTokens = float64(burst)
+			}
+		} else {
+			limiter := getLimiter(rps, burst)
+			allowed, remainingTokens = limiter.AllowWithRemaining(clientIP)
+		}
+
+		// Calculate remaining (at least 0)
+		remaining := int(remainingTokens)
+		if remaining < 0 {
+			remaining = 0
+		}
+
+		// Set rate limit headers
+		c.Header("X-RateLimit-Limit", strconv.Itoa(rps))
+		c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
+		c.Header("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(time.Second).Unix(), 10))
+		c.Header("X-RateLimit-Burst", strconv.Itoa(burst))
+
+		if !allowed {
+			// Calculate retry after based on how many tokens we need and refill rate
+			retryAfterSeconds := 1.0
+			if rps > 0 {
+				tokensNeeded := 1.0 - remainingTokens
+				if tokensNeeded > 0 {
+					retryAfterSeconds = tokensNeeded / float64(rps)
+				}
+			}
+			retryAfter := int(retryAfterSeconds)
+			if retryAfter < 1 {
+				retryAfter = 1
+			}
+
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"success": false,
+				"error": gin.H{
+					"code":    "TOO_MANY_REQUESTS",
+					"message": "Rate limit exceeded. Please retry after " + strconv.Itoa(retryAfter) + " second(s).",
+				},
+			})
+			return
+		}
+
+		c.Next()
+	}
 }

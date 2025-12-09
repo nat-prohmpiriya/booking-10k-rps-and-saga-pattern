@@ -668,19 +668,19 @@
 
 ---
 
-### [ ]  P3-13: API Gateway - Rate Limiting
+### [x]  P3-13: API Gateway - Rate Limiting
 | Field | Value |
 |-------|-------|
 | **Description** | Implement Token Bucket rate limiting |
-| **Technical Context** | `apps/api-gateway/internal/middleware/rate_limit.go` |
+| **Technical Context** | `apps/api-gateway/internal/middleware/rate_limiter.go` |
 | **Acceptance Criteria** | - Token Bucket algorithm with burst<br>- Per-endpoint configuration<br>- Store state in Redis<br>- Return 429 with `Retry-After` header |
 
-- [ ] Implement Token Bucket algorithm
-- [ ] Configure per-endpoint limits
-- [ ] Store tokens in Redis
-- [ ] Add `X-RateLimit-*` headers
-- [ ] Add `Retry-After` header on 429
-- [ ] Write tests
+- [x] Implement Token Bucket algorithm
+- [x] Configure per-endpoint limits
+- [x] Store tokens in Redis
+- [x] Add `X-RateLimit-*` headers
+- [x] Add `Retry-After` header on 429
+- [x] Write tests
 
 ---
 

@@ -175,6 +175,11 @@ func (c *Client) GetScriptSHA(name string) (string, bool) {
 	return "", false
 }
 
+// Eval executes a Lua script directly
+func (c *Client) Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
+	return c.client.Eval(ctx, script, keys, args...)
+}
+
 // EvalSha executes a script by SHA (faster than Eval)
 func (c *Client) EvalSha(ctx context.Context, sha string, keys []string, args ...interface{}) *redis.Cmd {
 	return c.client.EvalSha(ctx, sha, keys, args...)
