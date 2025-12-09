@@ -582,3 +582,443 @@ func TestReleaseSeats_AtomicityUnderConcurrency(t *testing.T) {
 		t.Errorf("Expected 1000 available after all releases, got %d", finalAvailable)
 	}
 }
+
+// ============================================================================
+// Confirm Booking Tests
+// ============================================================================
+
+const confirmBookingScript = `--[[
+    Confirm Booking Lua Script
+--]]
+
+local reservation_key = KEYS[1]
+
+local booking_id = ARGV[1]
+local user_id = ARGV[2]
+local payment_id = ARGV[3] or ""
+
+local reservation = redis.call("HGETALL", reservation_key)
+if #reservation == 0 then
+    return {0, "RESERVATION_NOT_FOUND", "Reservation does not exist or has expired"}
+end
+
+local reservation_data = {}
+for i = 1, #reservation, 2 do
+    reservation_data[reservation[i]] = reservation[i + 1]
+end
+
+if reservation_data["booking_id"] ~= booking_id then
+    return {0, "INVALID_BOOKING_ID", "Booking ID does not match"}
+end
+
+if reservation_data["user_id"] ~= user_id then
+    return {0, "INVALID_USER_ID", "User ID does not match"}
+end
+
+local status = reservation_data["status"]
+if status == "confirmed" then
+    return {0, "ALREADY_CONFIRMED", "Reservation is already confirmed"}
+end
+
+if status ~= "reserved" then
+    return {0, "INVALID_STATUS", "Reservation status is '" .. (status or "unknown") .. "', expected 'reserved'"}
+end
+
+local timestamp = redis.call("TIME")
+local confirmed_at = timestamp[1] .. "." .. timestamp[2]
+
+redis.call("HSET", reservation_key,
+    "status", "confirmed",
+    "confirmed_at", confirmed_at,
+    "payment_id", payment_id
+)
+
+redis.call("PERSIST", reservation_key)
+
+return {1, "CONFIRMED", confirmed_at}
+`
+
+func TestConfirmBooking_Success(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test. Set INTEGRATION_TEST=true to run")
+	}
+
+	ctx := context.Background()
+	cfg := getTestRedisConfig()
+
+	client, err := redis.NewClient(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	defer client.Close()
+
+	// Test data
+	zoneID := "test-zone-confirm-001"
+	userID := "test-user-confirm-001"
+	eventID := "test-event-confirm-001"
+	bookingID := "test-booking-confirm-001"
+	paymentID := "test-payment-001"
+
+	zoneKey := "zone:availability:" + zoneID
+	userKey := "user:reservations:" + userID + ":" + eventID
+	reservationKey := "reservation:" + bookingID
+
+	// Cleanup
+	defer client.Del(ctx, zoneKey, userKey, reservationKey)
+
+	// Setup: Initialize zone with 100 seats and create a reservation
+	client.Set(ctx, zoneKey, "100", time.Hour)
+
+	_, err = client.LoadScript(ctx, "reserve_seats", reserveSeatsScript)
+	if err != nil {
+		t.Fatalf("Failed to load reserve script: %v", err)
+	}
+
+	result, err := client.EvalShaByName(ctx, "reserve_seats",
+		[]string{zoneKey, userKey, reservationKey},
+		2, 10, userID, bookingID, zoneID, eventID, "show-001", "1000", 600,
+	).Slice()
+	if err != nil {
+		t.Fatalf("Reserve failed: %v", err)
+	}
+
+	if result[0].(int64) != 1 {
+		t.Fatalf("Reserve should succeed, got: %v", result)
+	}
+
+	// Verify reservation has TTL before confirm
+	ttlBefore, _ := client.TTL(ctx, reservationKey).Result()
+	if ttlBefore <= 0 {
+		t.Errorf("Reservation should have TTL before confirm, got %v", ttlBefore)
+	}
+
+	// Confirm the booking
+	_, err = client.LoadScript(ctx, "confirm_booking", confirmBookingScript)
+	if err != nil {
+		t.Fatalf("Failed to load confirm script: %v", err)
+	}
+
+	result, err = client.EvalShaByName(ctx, "confirm_booking",
+		[]string{reservationKey},
+		bookingID, userID, paymentID,
+	).Slice()
+	if err != nil {
+		t.Fatalf("Confirm failed: %v", err)
+	}
+
+	success := result[0].(int64)
+	if success != 1 {
+		t.Fatalf("Confirm should succeed, got: %v", result)
+	}
+
+	status := result[1].(string)
+	if status != "CONFIRMED" {
+		t.Errorf("Expected status CONFIRMED, got %s", status)
+	}
+
+	// Verify reservation status is now confirmed
+	reservationStatus, _ := client.HGet(ctx, reservationKey, "status").Result()
+	if reservationStatus != "confirmed" {
+		t.Errorf("Reservation status should be 'confirmed', got '%s'", reservationStatus)
+	}
+
+	// Verify payment_id is stored
+	storedPaymentID, _ := client.HGet(ctx, reservationKey, "payment_id").Result()
+	if storedPaymentID != paymentID {
+		t.Errorf("Payment ID should be '%s', got '%s'", paymentID, storedPaymentID)
+	}
+
+	// Verify confirmed_at is set
+	confirmedAt, _ := client.HGet(ctx, reservationKey, "confirmed_at").Result()
+	if confirmedAt == "" {
+		t.Error("confirmed_at should be set")
+	}
+
+	// Verify TTL is removed (PERSIST was called)
+	// TTL returns -1 when key exists but has no expiry
+	ttlAfter, _ := client.TTL(ctx, reservationKey).Result()
+	if ttlAfter >= 0 {
+		t.Errorf("Reservation should have no TTL after confirm (PERSIST), got %v", ttlAfter)
+	}
+}
+
+func TestConfirmBooking_ReservationNotFound(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test. Set INTEGRATION_TEST=true to run")
+	}
+
+	ctx := context.Background()
+	cfg := getTestRedisConfig()
+
+	client, err := redis.NewClient(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	defer client.Close()
+
+	reservationKey := "reservation:test-booking-notfound-confirm"
+
+	// Cleanup
+	defer client.Del(ctx, reservationKey)
+
+	_, err = client.LoadScript(ctx, "confirm_booking", confirmBookingScript)
+	if err != nil {
+		t.Fatalf("Failed to load script: %v", err)
+	}
+
+	result, err := client.EvalShaByName(ctx, "confirm_booking",
+		[]string{reservationKey},
+		"booking-xxx", "user-xxx", "payment-xxx",
+	).Slice()
+	if err != nil {
+		t.Fatalf("Script execution failed: %v", err)
+	}
+
+	success := result[0].(int64)
+	if success != 0 {
+		t.Errorf("Expected failure (0), got %d", success)
+	}
+
+	errorCode := result[1].(string)
+	if errorCode != "RESERVATION_NOT_FOUND" {
+		t.Errorf("Expected error code RESERVATION_NOT_FOUND, got %s", errorCode)
+	}
+}
+
+func TestConfirmBooking_InvalidBookingID(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test. Set INTEGRATION_TEST=true to run")
+	}
+
+	ctx := context.Background()
+	cfg := getTestRedisConfig()
+
+	client, err := redis.NewClient(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	defer client.Close()
+
+	zoneID := "test-zone-invalidbooking-confirm"
+	userID := "test-user-invalidbooking-confirm"
+	eventID := "test-event-invalidbooking-confirm"
+	bookingID := "test-booking-invalidbooking-confirm"
+
+	zoneKey := "zone:availability:" + zoneID
+	userKey := "user:reservations:" + userID + ":" + eventID
+	reservationKey := "reservation:" + bookingID
+
+	defer client.Del(ctx, zoneKey, userKey, reservationKey)
+
+	client.Set(ctx, zoneKey, "100", time.Hour)
+
+	// Reserve first
+	_, _ = client.LoadScript(ctx, "reserve_seats", reserveSeatsScript)
+	_, _ = client.EvalShaByName(ctx, "reserve_seats",
+		[]string{zoneKey, userKey, reservationKey},
+		2, 10, userID, bookingID, zoneID, eventID, "show-001", "1000", 600,
+	).Slice()
+
+	// Try to confirm with wrong booking ID
+	_, _ = client.LoadScript(ctx, "confirm_booking", confirmBookingScript)
+	result, err := client.EvalShaByName(ctx, "confirm_booking",
+		[]string{reservationKey},
+		"wrong-booking-id", userID, "payment-001",
+	).Slice()
+	if err != nil {
+		t.Fatalf("Script execution failed: %v", err)
+	}
+
+	success := result[0].(int64)
+	if success != 0 {
+		t.Errorf("Expected failure (0), got %d", success)
+	}
+
+	errorCode := result[1].(string)
+	if errorCode != "INVALID_BOOKING_ID" {
+		t.Errorf("Expected error code INVALID_BOOKING_ID, got %s", errorCode)
+	}
+}
+
+func TestConfirmBooking_InvalidUserID(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test. Set INTEGRATION_TEST=true to run")
+	}
+
+	ctx := context.Background()
+	cfg := getTestRedisConfig()
+
+	client, err := redis.NewClient(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	defer client.Close()
+
+	zoneID := "test-zone-invaliduser-confirm"
+	userID := "test-user-invaliduser-confirm"
+	eventID := "test-event-invaliduser-confirm"
+	bookingID := "test-booking-invaliduser-confirm"
+
+	zoneKey := "zone:availability:" + zoneID
+	userKey := "user:reservations:" + userID + ":" + eventID
+	reservationKey := "reservation:" + bookingID
+
+	defer client.Del(ctx, zoneKey, userKey, reservationKey)
+
+	client.Set(ctx, zoneKey, "100", time.Hour)
+
+	// Reserve first
+	_, _ = client.LoadScript(ctx, "reserve_seats", reserveSeatsScript)
+	_, _ = client.EvalShaByName(ctx, "reserve_seats",
+		[]string{zoneKey, userKey, reservationKey},
+		2, 10, userID, bookingID, zoneID, eventID, "show-001", "1000", 600,
+	).Slice()
+
+	// Try to confirm with wrong user ID
+	_, _ = client.LoadScript(ctx, "confirm_booking", confirmBookingScript)
+	result, err := client.EvalShaByName(ctx, "confirm_booking",
+		[]string{reservationKey},
+		bookingID, "wrong-user-id", "payment-001",
+	).Slice()
+	if err != nil {
+		t.Fatalf("Script execution failed: %v", err)
+	}
+
+	success := result[0].(int64)
+	if success != 0 {
+		t.Errorf("Expected failure (0), got %d", success)
+	}
+
+	errorCode := result[1].(string)
+	if errorCode != "INVALID_USER_ID" {
+		t.Errorf("Expected error code INVALID_USER_ID, got %s", errorCode)
+	}
+}
+
+func TestConfirmBooking_AlreadyConfirmed(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test. Set INTEGRATION_TEST=true to run")
+	}
+
+	ctx := context.Background()
+	cfg := getTestRedisConfig()
+
+	client, err := redis.NewClient(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	defer client.Close()
+
+	zoneID := "test-zone-alreadyconfirmed"
+	userID := "test-user-alreadyconfirmed"
+	eventID := "test-event-alreadyconfirmed"
+	bookingID := "test-booking-alreadyconfirmed"
+
+	zoneKey := "zone:availability:" + zoneID
+	userKey := "user:reservations:" + userID + ":" + eventID
+	reservationKey := "reservation:" + bookingID
+
+	defer client.Del(ctx, zoneKey, userKey, reservationKey)
+
+	client.Set(ctx, zoneKey, "100", time.Hour)
+
+	// Reserve first
+	_, _ = client.LoadScript(ctx, "reserve_seats", reserveSeatsScript)
+	_, _ = client.EvalShaByName(ctx, "reserve_seats",
+		[]string{zoneKey, userKey, reservationKey},
+		2, 10, userID, bookingID, zoneID, eventID, "show-001", "1000", 600,
+	).Slice()
+
+	// First confirm - should succeed
+	_, _ = client.LoadScript(ctx, "confirm_booking", confirmBookingScript)
+	result1, _ := client.EvalShaByName(ctx, "confirm_booking",
+		[]string{reservationKey},
+		bookingID, userID, "payment-001",
+	).Slice()
+
+	if result1[0].(int64) != 1 {
+		t.Fatalf("First confirm should succeed, got: %v", result1)
+	}
+
+	// Second confirm - should fail with ALREADY_CONFIRMED
+	result2, err := client.EvalShaByName(ctx, "confirm_booking",
+		[]string{reservationKey},
+		bookingID, userID, "payment-002",
+	).Slice()
+	if err != nil {
+		t.Fatalf("Script execution failed: %v", err)
+	}
+
+	success := result2[0].(int64)
+	if success != 0 {
+		t.Errorf("Expected failure (0), got %d", success)
+	}
+
+	errorCode := result2[1].(string)
+	if errorCode != "ALREADY_CONFIRMED" {
+		t.Errorf("Expected error code ALREADY_CONFIRMED, got %s", errorCode)
+	}
+}
+
+func TestConfirmBooking_CannotConfirmReleasedReservation(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test. Set INTEGRATION_TEST=true to run")
+	}
+
+	ctx := context.Background()
+	cfg := getTestRedisConfig()
+
+	client, err := redis.NewClient(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	defer client.Close()
+
+	zoneID := "test-zone-released-confirm"
+	userID := "test-user-released-confirm"
+	eventID := "test-event-released-confirm"
+	bookingID := "test-booking-released-confirm"
+
+	zoneKey := "zone:availability:" + zoneID
+	userKey := "user:reservations:" + userID + ":" + eventID
+	reservationKey := "reservation:" + bookingID
+
+	defer client.Del(ctx, zoneKey, userKey, reservationKey)
+
+	client.Set(ctx, zoneKey, "100", time.Hour)
+
+	// Reserve first
+	_, _ = client.LoadScript(ctx, "reserve_seats", reserveSeatsScript)
+	_, _ = client.EvalShaByName(ctx, "reserve_seats",
+		[]string{zoneKey, userKey, reservationKey},
+		2, 10, userID, bookingID, zoneID, eventID, "show-001", "1000", 600,
+	).Slice()
+
+	// Release the reservation
+	_, _ = client.LoadScript(ctx, "release_seats", releaseSeatsScript)
+	_, _ = client.EvalShaByName(ctx, "release_seats",
+		[]string{zoneKey, userKey, reservationKey},
+		bookingID, userID,
+	).Slice()
+
+	// Try to confirm released reservation - should fail with RESERVATION_NOT_FOUND
+	// because release deletes the reservation key
+	_, _ = client.LoadScript(ctx, "confirm_booking", confirmBookingScript)
+	result, err := client.EvalShaByName(ctx, "confirm_booking",
+		[]string{reservationKey},
+		bookingID, userID, "payment-001",
+	).Slice()
+	if err != nil {
+		t.Fatalf("Script execution failed: %v", err)
+	}
+
+	success := result[0].(int64)
+	if success != 0 {
+		t.Errorf("Expected failure (0), got %d", success)
+	}
+
+	errorCode := result[1].(string)
+	if errorCode != "RESERVATION_NOT_FOUND" {
+		t.Errorf("Expected error code RESERVATION_NOT_FOUND, got %s", errorCode)
+	}
+}
