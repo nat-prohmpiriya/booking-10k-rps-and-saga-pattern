@@ -533,18 +533,18 @@
 
 ---
 
-### [ ]  P3-04: Auth Service - Token Refresh
+### [x]  P3-04: Auth Service - Token Refresh
 | Field | Value |
 |-------|-------|
 | **Description** | Implement token refresh |
 | **Technical Context** | `apps/auth-service/internal/handler/auth_handler.go` |
 | **Acceptance Criteria** | - `POST /auth/refresh` returns new access token<br>- Validates refresh token<br>- Rotates refresh token (security) |
 
-- [ ] Validate refresh token
-- [ ] Generate new access token
-- [ ] Rotate refresh token
-- [ ] Invalidate old refresh token
-- [ ] Write tests
+- [x] Validate refresh token
+- [x] Generate new access token
+- [x] Rotate refresh token
+- [x] Invalidate old refresh token
+- [x] Write tests
 
 ---
 

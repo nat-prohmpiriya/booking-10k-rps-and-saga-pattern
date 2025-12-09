@@ -390,6 +390,198 @@ func TestAuthService_RefreshToken(t *testing.T) {
 	})
 }
 
+func TestAuthService_RefreshTokenRotation(t *testing.T) {
+	userRepo := newMockUserRepository()
+	sessionRepo := newMockSessionRepository()
+	config := &AuthServiceConfig{
+		JWTSecret:          "test-secret-key",
+		AccessTokenExpiry:  15 * time.Minute,
+		RefreshTokenExpiry: 7 * 24 * time.Hour,
+		BcryptCost:         10,
+	}
+	svc := NewAuthService(userRepo, sessionRepo, config)
+
+	// Create user
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("Password1!"), 10)
+	testUser := &domain.User{
+		ID:           "rotation-user-id",
+		Email:        "rotation@example.com",
+		PasswordHash: string(hashedPassword),
+		Name:         "Rotation Test",
+		Role:         domain.RoleUser,
+		IsActive:     true,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	userRepo.users[testUser.ID] = testUser
+	userRepo.emailIndex[testUser.Email] = testUser
+
+	t.Run("old refresh token is invalidated after rotation", func(t *testing.T) {
+		// Login to get initial tokens
+		loginReq := &dto.LoginRequest{
+			Email:    "rotation@example.com",
+			Password: "Password1!",
+		}
+		loginResp, err := svc.Login(context.Background(), loginReq, "Test-Agent", "127.0.0.1")
+		if err != nil {
+			t.Fatalf("Login() error = %v", err)
+		}
+
+		oldRefreshToken := loginResp.RefreshToken
+
+		// Refresh token to get new tokens
+		refreshResp, err := svc.RefreshToken(context.Background(), oldRefreshToken)
+		if err != nil {
+			t.Fatalf("RefreshToken() error = %v", err)
+		}
+
+		// Verify new refresh token is different
+		if refreshResp.RefreshToken == oldRefreshToken {
+			t.Error("RefreshToken() should return a different refresh token")
+		}
+
+		// Try to use old refresh token - should fail
+		_, err = svc.RefreshToken(context.Background(), oldRefreshToken)
+		if err != ErrSessionNotFound {
+			t.Errorf("Using old refresh token should fail with ErrSessionNotFound, got %v", err)
+		}
+
+		// New refresh token should still work
+		_, err = svc.RefreshToken(context.Background(), refreshResp.RefreshToken)
+		if err != nil {
+			t.Errorf("Using new refresh token should succeed, got error: %v", err)
+		}
+	})
+
+	t.Run("refresh token generates valid access token", func(t *testing.T) {
+		// Login
+		loginReq := &dto.LoginRequest{
+			Email:    "rotation@example.com",
+			Password: "Password1!",
+		}
+		loginResp, err := svc.Login(context.Background(), loginReq, "Test-Agent", "127.0.0.1")
+		if err != nil {
+			t.Fatalf("Login() error = %v", err)
+		}
+
+		// Refresh
+		refreshResp, err := svc.RefreshToken(context.Background(), loginResp.RefreshToken)
+		if err != nil {
+			t.Fatalf("RefreshToken() error = %v", err)
+		}
+
+		// Validate new access token
+		claims, err := svc.ValidateToken(context.Background(), refreshResp.AccessToken)
+		if err != nil {
+			t.Fatalf("ValidateToken() error = %v", err)
+		}
+
+		if claims.UserID != testUser.ID {
+			t.Errorf("ValidateToken() UserID = %v, want %v", claims.UserID, testUser.ID)
+		}
+		if claims.Email != testUser.Email {
+			t.Errorf("ValidateToken() Email = %v, want %v", claims.Email, testUser.Email)
+		}
+	})
+}
+
+func TestAuthService_RefreshTokenWithInactiveUser(t *testing.T) {
+	userRepo := newMockUserRepository()
+	sessionRepo := newMockSessionRepository()
+	config := &AuthServiceConfig{
+		JWTSecret:          "test-secret-key",
+		AccessTokenExpiry:  15 * time.Minute,
+		RefreshTokenExpiry: 7 * 24 * time.Hour,
+		BcryptCost:         10,
+	}
+	svc := NewAuthService(userRepo, sessionRepo, config)
+
+	// Create active user
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("Password1!"), 10)
+	testUser := &domain.User{
+		ID:           "deactivate-user-id",
+		Email:        "deactivate@example.com",
+		PasswordHash: string(hashedPassword),
+		Name:         "Deactivate Test",
+		Role:         domain.RoleUser,
+		IsActive:     true,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	userRepo.users[testUser.ID] = testUser
+	userRepo.emailIndex[testUser.Email] = testUser
+
+	// Login while user is active
+	loginReq := &dto.LoginRequest{
+		Email:    "deactivate@example.com",
+		Password: "Password1!",
+	}
+	loginResp, err := svc.Login(context.Background(), loginReq, "Test-Agent", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+
+	// Deactivate user
+	testUser.IsActive = false
+
+	// Try to refresh token - should fail because user is inactive
+	_, err = svc.RefreshToken(context.Background(), loginResp.RefreshToken)
+	if err != ErrUserInactive {
+		t.Errorf("RefreshToken() with inactive user error = %v, want %v", err, ErrUserInactive)
+	}
+}
+
+func TestAuthService_RefreshTokenExpired(t *testing.T) {
+	userRepo := newMockUserRepository()
+	sessionRepo := newMockSessionRepository()
+	config := &AuthServiceConfig{
+		JWTSecret:          "test-secret-key",
+		AccessTokenExpiry:  15 * time.Minute,
+		RefreshTokenExpiry: 7 * 24 * time.Hour,
+		BcryptCost:         10,
+	}
+	svc := NewAuthService(userRepo, sessionRepo, config)
+
+	// Create user
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("Password1!"), 10)
+	testUser := &domain.User{
+		ID:           "expired-user-id",
+		Email:        "expired@example.com",
+		PasswordHash: string(hashedPassword),
+		Name:         "Expired Test",
+		Role:         domain.RoleUser,
+		IsActive:     true,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	userRepo.users[testUser.ID] = testUser
+	userRepo.emailIndex[testUser.Email] = testUser
+
+	// Create an expired session directly
+	expiredSession := &domain.Session{
+		ID:           "expired-session-id",
+		UserID:       testUser.ID,
+		RefreshToken: "expired-refresh-token",
+		UserAgent:    "Test-Agent",
+		IP:           "127.0.0.1",
+		ExpiresAt:    time.Now().Add(-1 * time.Hour), // Expired 1 hour ago
+		CreatedAt:    time.Now().Add(-8 * 24 * time.Hour),
+	}
+	sessionRepo.sessions[expiredSession.ID] = expiredSession
+	sessionRepo.refreshTokenIndex[expiredSession.RefreshToken] = expiredSession
+
+	// Try to refresh with expired token
+	_, err := svc.RefreshToken(context.Background(), "expired-refresh-token")
+	if err != ErrTokenExpired {
+		t.Errorf("RefreshToken() with expired session error = %v, want %v", err, ErrTokenExpired)
+	}
+
+	// Verify session was deleted
+	if _, exists := sessionRepo.sessions[expiredSession.ID]; exists {
+		t.Error("Expired session should be deleted after refresh attempt")
+	}
+}
+
 func TestAuthService_Logout(t *testing.T) {
 	userRepo := newMockUserRepository()
 	sessionRepo := newMockSessionRepository()

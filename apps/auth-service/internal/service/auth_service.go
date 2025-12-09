@@ -215,13 +215,13 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken string) (*d
 		return nil, err
 	}
 
-	// Update session with new refresh token
+	// Delete old session first (before modifying the session object)
+	_ = s.sessionRepo.Delete(ctx, session.ID)
+
+	// Update session with new refresh token and create new session
+	session.ID = uuid.New().String()
 	session.RefreshToken = tokenPair.RefreshToken
 	session.ExpiresAt = time.Now().Add(s.config.RefreshTokenExpiry)
-
-	// Delete old session and create new one (atomic operation not needed for this use case)
-	_ = s.sessionRepo.Delete(ctx, session.ID)
-	session.ID = uuid.New().String()
 	session.CreatedAt = time.Now()
 	if err := s.sessionRepo.Create(ctx, session); err != nil {
 		return nil, err
