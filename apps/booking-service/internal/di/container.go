@@ -18,6 +18,9 @@ type Container struct {
 	BookingRepo     repository.BookingRepository
 	ReservationRepo repository.ReservationRepository
 
+	// Publishers
+	EventPublisher service.EventPublisher
+
 	// Services
 	BookingService service.BookingService
 
@@ -32,6 +35,7 @@ type ContainerConfig struct {
 	Redis           *redis.Client
 	BookingRepo     repository.BookingRepository
 	ReservationRepo repository.ReservationRepository
+	EventPublisher  service.EventPublisher
 	ServiceConfig   *service.BookingServiceConfig
 }
 
@@ -42,12 +46,14 @@ func NewContainer(cfg *ContainerConfig) *Container {
 		Redis:           cfg.Redis,
 		BookingRepo:     cfg.BookingRepo,
 		ReservationRepo: cfg.ReservationRepo,
+		EventPublisher:  cfg.EventPublisher,
 	}
 
 	// Initialize services
 	c.BookingService = service.NewBookingService(
 		c.BookingRepo,
 		c.ReservationRepo,
+		c.EventPublisher,
 		cfg.ServiceConfig,
 	)
 

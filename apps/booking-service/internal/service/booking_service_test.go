@@ -310,7 +310,7 @@ func TestBookingService_ReserveSeats(t *testing.T) {
 				tt.setupMocks(bookingRepo, reservationRepo)
 			}
 
-			svc := NewBookingService(bookingRepo, reservationRepo, &BookingServiceConfig{
+			svc := NewBookingService(bookingRepo, reservationRepo, nil, &BookingServiceConfig{
 				ReservationTTL: 10 * time.Minute,
 				MaxPerUser:     10,
 			})
@@ -456,7 +456,7 @@ func TestBookingService_ConfirmBooking(t *testing.T) {
 				tt.setupMocks(bookingRepo, reservationRepo)
 			}
 
-			svc := NewBookingService(bookingRepo, reservationRepo, nil)
+			svc := NewBookingService(bookingRepo, reservationRepo, nil, nil)
 
 			resp, err := svc.ConfirmBooking(context.Background(), tt.bookingID, tt.userID, tt.req)
 
@@ -562,7 +562,7 @@ func TestBookingService_CancelBooking(t *testing.T) {
 				tt.setupMocks(bookingRepo, reservationRepo)
 			}
 
-			svc := NewBookingService(bookingRepo, reservationRepo, nil)
+			svc := NewBookingService(bookingRepo, reservationRepo, nil, nil)
 
 			resp, err := svc.CancelBooking(context.Background(), tt.bookingID, tt.userID)
 
@@ -648,7 +648,7 @@ func TestBookingService_GetBooking(t *testing.T) {
 				tt.setupMocks(bookingRepo)
 			}
 
-			svc := NewBookingService(bookingRepo, reservationRepo, nil)
+			svc := NewBookingService(bookingRepo, reservationRepo, nil, nil)
 
 			resp, err := svc.GetBooking(context.Background(), tt.bookingID, tt.userID)
 
@@ -744,7 +744,7 @@ func TestBookingService_GetUserBookings(t *testing.T) {
 				tt.setupMocks(bookingRepo)
 			}
 
-			svc := NewBookingService(bookingRepo, reservationRepo, nil)
+			svc := NewBookingService(bookingRepo, reservationRepo, nil, nil)
 
 			resp, err := svc.GetUserBookings(context.Background(), tt.userID, tt.page, tt.pageSize)
 
@@ -843,7 +843,7 @@ func TestBookingService_ExpireReservations(t *testing.T) {
 				tt.setupMocks(bookingRepo)
 			}
 
-			svc := NewBookingService(bookingRepo, reservationRepo, nil)
+			svc := NewBookingService(bookingRepo, reservationRepo, nil, nil)
 
 			count, err := svc.ExpireReservations(context.Background(), tt.limit)
 
@@ -868,7 +868,7 @@ func TestBookingService_ExpireReservations(t *testing.T) {
 
 func TestBookingServiceConfig(t *testing.T) {
 	t.Run("default config", func(t *testing.T) {
-		svc := NewBookingService(nil, nil, nil)
+		svc := NewBookingService(nil, nil, nil, nil)
 		impl := svc.(*bookingService)
 
 		if impl.reservationTTL != 10*time.Minute {
@@ -883,7 +883,7 @@ func TestBookingServiceConfig(t *testing.T) {
 	})
 
 	t.Run("custom config", func(t *testing.T) {
-		svc := NewBookingService(nil, nil, &BookingServiceConfig{
+		svc := NewBookingService(nil, nil, nil, &BookingServiceConfig{
 			ReservationTTL:  5 * time.Minute,
 			MaxPerUser:      4,
 			DefaultCurrency: "USD",

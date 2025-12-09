@@ -43,6 +43,7 @@ type BookingService interface {
 type bookingService struct {
 	bookingRepo     repository.BookingRepository
 	reservationRepo repository.ReservationRepository
+	eventPublisher  EventPublisher
 	reservationTTL  time.Duration
 	maxPerUser      int
 	defaultCurrency string
@@ -59,6 +60,7 @@ type BookingServiceConfig struct {
 func NewBookingService(
 	bookingRepo repository.BookingRepository,
 	reservationRepo repository.ReservationRepository,
+	eventPublisher EventPublisher,
 	cfg *BookingServiceConfig,
 ) BookingService {
 	ttl := 10 * time.Minute
@@ -75,9 +77,14 @@ func NewBookingService(
 			currency = cfg.DefaultCurrency
 		}
 	}
+	// Use NoOpEventPublisher if none provided
+	if eventPublisher == nil {
+		eventPublisher = NewNoOpEventPublisher()
+	}
 	return &bookingService{
 		bookingRepo:     bookingRepo,
 		reservationRepo: reservationRepo,
+		eventPublisher:  eventPublisher,
 		reservationTTL:  ttl,
 		maxPerUser:      maxPerUser,
 		defaultCurrency: currency,
@@ -186,6 +193,14 @@ func (s *bookingService) ReserveSeats(ctx context.Context, userID string, req *d
 		return nil, err
 	}
 
+	// Publish booking created event (async, don't block on failure)
+	go func() {
+		if pubErr := s.eventPublisher.PublishBookingCreated(context.Background(), booking); pubErr != nil {
+			// Log error but don't fail the request
+			// TODO: Add proper logging
+		}
+	}()
+
 	return &dto.ReserveSeatsResponse{
 		BookingID:  booking.ID,
 		Status:     string(booking.Status),
@@ -260,10 +275,25 @@ func (s *bookingService) ConfirmBooking(ctx context.Context, bookingID, userID s
 	// Generate confirmation code
 	confirmationCode := generateConfirmationCode()
 
+	// Update booking object for event publishing
+	booking.Status = domain.BookingStatusConfirmed
+	booking.PaymentID = paymentID
+	booking.ConfirmationCode = confirmationCode
+	now := time.Now()
+	booking.ConfirmedAt = &now
+
+	// Publish booking confirmed event (async, don't block on failure)
+	go func() {
+		if pubErr := s.eventPublisher.PublishBookingConfirmed(context.Background(), booking); pubErr != nil {
+			// Log error but don't fail the request
+			// TODO: Add proper logging
+		}
+	}()
+
 	return &dto.ConfirmBookingResponse{
 		BookingID:        bookingID,
 		Status:           "confirmed",
-		ConfirmedAt:      time.Now(),
+		ConfirmedAt:      now,
 		ConfirmationCode: confirmationCode,
 	}, nil
 }
@@ -319,6 +349,19 @@ func (s *bookingService) CancelBooking(ctx context.Context, bookingID, userID st
 	if err := s.bookingRepo.Cancel(ctx, bookingID); err != nil {
 		return nil, err
 	}
+
+	// Update booking object for event publishing
+	booking.Status = domain.BookingStatusCancelled
+	now := time.Now()
+	booking.CancelledAt = &now
+
+	// Publish booking cancelled event (async, don't block on failure)
+	go func() {
+		if pubErr := s.eventPublisher.PublishBookingCancelled(context.Background(), booking); pubErr != nil {
+			// Log error but don't fail the request
+			// TODO: Add proper logging
+		}
+	}()
 
 	return &dto.ReleaseBookingResponse{
 		BookingID: bookingID,
@@ -429,6 +472,18 @@ func (s *bookingService) ExpireReservations(ctx context.Context, limit int) (int
 		if err := s.bookingRepo.MarkAsExpired(ctx, booking.ID); err != nil {
 			continue // Log error but continue processing
 		}
+
+		// Update booking object for event publishing
+		booking.Status = domain.BookingStatusExpired
+
+		// Publish booking expired event (async, don't block on failure)
+		go func(b *domain.Booking) {
+			if pubErr := s.eventPublisher.PublishBookingExpired(context.Background(), b); pubErr != nil {
+				// Log error but don't fail the request
+				// TODO: Add proper logging
+			}
+		}(booking)
+
 		expiredCount++
 	}
 

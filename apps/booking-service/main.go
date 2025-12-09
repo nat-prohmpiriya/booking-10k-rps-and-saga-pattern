@@ -83,6 +83,22 @@ func main() {
 		appLog.Info("Redis connected")
 	}
 
+	// Initialize Kafka event publisher
+	var eventPublisher service.EventPublisher
+	eventPubCfg := &service.EventPublisherConfig{
+		Brokers:     cfg.Kafka.Brokers,
+		Topic:       "booking-events",
+		ServiceName: "booking-service",
+		ClientID:    cfg.Kafka.ClientID,
+	}
+	eventPublisher, err = service.NewKafkaEventPublisher(ctx, eventPubCfg)
+	if err != nil {
+		appLog.Warn(fmt.Sprintf("Kafka connection failed, using no-op publisher: %v", err))
+		eventPublisher = service.NewNoOpEventPublisher()
+	} else {
+		appLog.Info("Kafka event publisher connected")
+	}
+
 	// Build dependency injection container
 	// Note: Repository implementations will be added in future tasks
 	container := di.NewContainer(&di.ContainerConfig{
@@ -90,6 +106,7 @@ func main() {
 		Redis:           redis,
 		BookingRepo:     nil, // TODO: Implement PostgresBookingRepository
 		ReservationRepo: nil, // TODO: Implement RedisReservationRepository
+		EventPublisher:  eventPublisher,
 		ServiceConfig: &service.BookingServiceConfig{
 			ReservationTTL: 10 * time.Minute,
 			MaxPerUser:     10,
