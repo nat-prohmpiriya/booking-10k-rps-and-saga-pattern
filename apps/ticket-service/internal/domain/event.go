@@ -125,3 +125,19 @@ const (
 	ShowStatusCompleted = "completed"
 	ShowStatusCancelled = "cancelled"
 )
+
+// ShowZone represents a zone/section for a specific show
+// This allows different pricing and availability per show
+type ShowZone struct {
+	ID             string     `json:"id"`
+	ShowID         string     `json:"show_id"`
+	Name           string     `json:"name"`           // e.g. "VIP", "Standard", "Standing"
+	Price          float64    `json:"price"`          // Price per ticket in this zone
+	TotalSeats     int        `json:"total_seats"`    // Total seats in this zone
+	AvailableSeats int        `json:"available_seats"` // Seats still available (cached from Redis)
+	Description    string     `json:"description"`
+	SortOrder      int        `json:"sort_order"`     // Display order
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
+}

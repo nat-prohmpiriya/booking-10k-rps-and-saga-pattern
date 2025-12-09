@@ -113,3 +113,19 @@ type ShowRepository interface {
 	// Delete soft deletes a show by ID
 	Delete(ctx context.Context, id string) error
 }
+
+// ShowZoneRepository defines the interface for show zone data access
+type ShowZoneRepository interface {
+	// Create creates a new show zone
+	Create(ctx context.Context, zone *domain.ShowZone) error
+	// GetByID retrieves a show zone by ID
+	GetByID(ctx context.Context, id string) (*domain.ShowZone, error)
+	// GetByShowID retrieves all zones for a show with pagination
+	GetByShowID(ctx context.Context, showID string, limit, offset int) ([]*domain.ShowZone, int, error)
+	// Update updates a show zone
+	Update(ctx context.Context, zone *domain.ShowZone) error
+	// Delete soft deletes a show zone by ID
+	Delete(ctx context.Context, id string) error
+	// UpdateAvailableSeats updates the available seats count
+	UpdateAvailableSeats(ctx context.Context, id string, availableSeats int) error
+}

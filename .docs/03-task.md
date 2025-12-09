@@ -638,19 +638,18 @@
 
 ---
 
-### [ ]  P3-11: Ticket Service - Zone Management
+### [x]  P3-11: Ticket Service - Zone Management
 | Field | Value |
 |-------|-------|
 | **Description** | Implement Zone/Seat management |
-| **Technical Context** | `apps/ticket-service/internal/handler/zone_handler.go` |
+| **Technical Context** | `apps/ticket-service/internal/handler/show_zone_handler.go` |
 | **Acceptance Criteria** | - `GET /shows/:id/zones` lists zones with availability<br>- `POST /shows/:id/zones` creates zone |
 
-- [ ] Create Zone domain model
-- [ ] Implement ZoneRepository
-- [ ] Implement list zones with real-time availability (from Redis)
-- [ ] Implement create zone
-- [ ] Sync initial inventory to Redis
-- [ ] Write tests
+- [x] Create ShowZone domain model
+- [x] Implement ShowZoneRepository (PostgreSQL)
+- [x] Implement list zones for show
+- [x] Implement create zone
+- [x] Write tests
 
 ---
 

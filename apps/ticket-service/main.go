@@ -123,6 +123,7 @@ func main() {
 		{
 			// Public endpoints
 			shows.GET("/:id", container.ShowHandler.GetByID)
+			shows.GET("/:id/zones", container.ShowZoneHandler.ListByShow)
 
 			// Protected endpoints (Organizer/Admin only)
 			protectedShows := shows.Group("")
@@ -131,6 +132,23 @@ func main() {
 			{
 				protectedShows.PUT("/:id", container.ShowHandler.Update)
 				protectedShows.DELETE("/:id", container.ShowHandler.Delete)
+				protectedShows.POST("/:id/zones", container.ShowZoneHandler.Create)
+			}
+		}
+
+		// Zones endpoints - for direct zone access
+		zones := v1.Group("/zones")
+		{
+			// Public endpoints
+			zones.GET("/:id", container.ShowZoneHandler.GetByID)
+
+			// Protected endpoints (Organizer/Admin only)
+			protectedZones := zones.Group("")
+			protectedZones.Use(middleware.JWTMiddleware(jwtConfig))
+			protectedZones.Use(middleware.RequireRole("admin", "organizer"))
+			{
+				protectedZones.PUT("/:id", container.ShowZoneHandler.Update)
+				protectedZones.DELETE("/:id", container.ShowZoneHandler.Delete)
 			}
 		}
 

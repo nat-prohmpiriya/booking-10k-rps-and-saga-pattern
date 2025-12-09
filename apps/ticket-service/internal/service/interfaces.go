@@ -70,3 +70,17 @@ type ShowService interface {
 	// DeleteShow soft deletes a show
 	DeleteShow(ctx context.Context, id string) error
 }
+
+// ShowZoneService defines the interface for show zone business logic
+type ShowZoneService interface {
+	// CreateShowZone creates a new zone for a show
+	CreateShowZone(ctx context.Context, req *dto.CreateShowZoneRequest) (*domain.ShowZone, error)
+	// GetShowZoneByID retrieves a show zone by ID
+	GetShowZoneByID(ctx context.Context, id string) (*domain.ShowZone, error)
+	// ListZonesByShow lists zones for a show
+	ListZonesByShow(ctx context.Context, showID string, filter *dto.ShowZoneListFilter) ([]*domain.ShowZone, int, error)
+	// UpdateShowZone updates a show zone
+	UpdateShowZone(ctx context.Context, id string, req *dto.UpdateShowZoneRequest) (*domain.ShowZone, error)
+	// DeleteShowZone soft deletes a show zone
+	DeleteShowZone(ctx context.Context, id string) error
+}
