@@ -1,7 +1,8 @@
 # Booking Rush 10k RPS - Makefile
 # ================================
 
-.PHONY: help dev dev-down build test lint migrate-up migrate-down clean
+.PHONY: help dev dev-down build test lint migrate-up migrate-down clean \
+	load-seed load-smoke load-ramp load-sustained load-spike load-10k load-full load-clean
 
 # Colors for output
 GREEN := \033[0;32m
@@ -47,6 +48,16 @@ help:
 	@echo "  make test-unit        - Run unit tests only"
 	@echo "  make test-integration - Run integration tests"
 	@echo "  make test-coverage    - Run tests with coverage"
+	@echo ""
+	@echo "$(YELLOW)Load Testing:$(NC)"
+	@echo "  make load-seed        - Seed test data to PostgreSQL and Redis"
+	@echo "  make load-smoke       - Run smoke test (1 VU, 30s)"
+	@echo "  make load-ramp        - Run ramp-up test (0→1000 VUs)"
+	@echo "  make load-sustained   - Run sustained load test (5000 RPS)"
+	@echo "  make load-spike       - Run spike test (1000→10000 RPS)"
+	@echo "  make load-10k         - Run 10k RPS stress test"
+	@echo "  make load-full        - Run full test suite with dashboard"
+	@echo "  make load-clean       - Clean up test data"
 	@echo ""
 	@echo "$(YELLOW)Code Quality:$(NC)"
 	@echo "  make lint             - Run linters"
@@ -196,6 +207,97 @@ test-coverage:
 test-bench:
 	@echo "$(GREEN)Running benchmarks...$(NC)"
 	go test ./pkg/... ./apps/... -bench=. -benchmem
+
+# ================================
+# Load Testing (k6)
+# ================================
+
+# Load test settings
+LOAD_TEST_DIR := tests/load
+LOAD_TEST_SCRIPT := $(LOAD_TEST_DIR)/booking_reserve.js
+BASE_URL ?= http://localhost:8083
+
+# Check if k6 is installed
+check-k6:
+	@which k6 > /dev/null || (echo "$(RED)k6 not installed. Run: brew install k6$(NC)" && exit 1)
+
+# Seed test data to PostgreSQL and Redis
+load-seed:
+	@echo "$(GREEN)Seeding load test data...$(NC)"
+	@chmod +x $(LOAD_TEST_DIR)/seed_all.sh
+	@$(LOAD_TEST_DIR)/seed_all.sh
+	@echo "$(GREEN)Test data seeded successfully!$(NC)"
+
+# Smoke test - quick validation (1 VU, 30s)
+load-smoke: check-k6
+	@echo "$(GREEN)Running smoke test...$(NC)"
+	k6 run --env BASE_URL=$(BASE_URL) \
+		--config /dev/stdin <<< '{"scenarios":{"smoke":{"executor":"constant-vus","vus":1,"duration":"30s"}}}' \
+		$(LOAD_TEST_SCRIPT)
+
+# Ramp-up test (0→1000 VUs over 9 minutes)
+load-ramp: check-k6
+	@echo "$(GREEN)Running ramp-up test...$(NC)"
+	K6_WEB_DASHBOARD=true k6 run --env BASE_URL=$(BASE_URL) \
+		--tag testid=ramp-$(shell date +%Y%m%d-%H%M%S) \
+		-e SCENARIO=ramp_up \
+		$(LOAD_TEST_SCRIPT)
+
+# Sustained load test (5000 RPS for 5 minutes)
+load-sustained: check-k6
+	@echo "$(GREEN)Running sustained load test (5000 RPS)...$(NC)"
+	K6_WEB_DASHBOARD=true k6 run --env BASE_URL=$(BASE_URL) \
+		--tag testid=sustained-$(shell date +%Y%m%d-%H%M%S) \
+		-e SCENARIO=sustained \
+		$(LOAD_TEST_SCRIPT)
+
+# Spike test (1000→10000 RPS)
+load-spike: check-k6
+	@echo "$(GREEN)Running spike test...$(NC)"
+	K6_WEB_DASHBOARD=true k6 run --env BASE_URL=$(BASE_URL) \
+		--tag testid=spike-$(shell date +%Y%m%d-%H%M%S) \
+		-e SCENARIO=spike \
+		$(LOAD_TEST_SCRIPT)
+
+# 10k RPS stress test
+load-10k: check-k6
+	@echo "$(GREEN)Running 10k RPS stress test...$(NC)"
+	K6_WEB_DASHBOARD=true k6 run --env BASE_URL=$(BASE_URL) \
+		--tag testid=stress10k-$(shell date +%Y%m%d-%H%M%S) \
+		-e SCENARIO=stress_10k \
+		$(LOAD_TEST_SCRIPT)
+
+# Full test suite with web dashboard
+load-full: check-k6
+	@echo "$(GREEN)Running full load test suite with dashboard...$(NC)"
+	@echo "$(YELLOW)Dashboard available at: http://localhost:5665$(NC)"
+	K6_WEB_DASHBOARD=true k6 run --env BASE_URL=$(BASE_URL) \
+		--tag testid=full-$(shell date +%Y%m%d-%H%M%S) \
+		$(LOAD_TEST_SCRIPT)
+
+# Quick load test (smoke only, no dashboard)
+load-quick: check-k6
+	@echo "$(GREEN)Running quick load test...$(NC)"
+	k6 run --env BASE_URL=$(BASE_URL) --duration 30s --vus 10 $(LOAD_TEST_SCRIPT)
+
+# Clean up test data
+load-clean:
+	@echo "$(YELLOW)Cleaning up load test data...$(NC)"
+	@echo "Cleaning PostgreSQL..."
+	@docker run --rm \
+		-e PGPASSWORD="$${POSTGRES_PASSWORD}" \
+		postgres:15-alpine \
+		psql -h $${POSTGRES_HOST:-100.104.0.42} -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-booking_rush} \
+		-c "DELETE FROM bookings WHERE user_id LIKE 'load-test-%'; \
+		    DELETE FROM seat_zones WHERE id LIKE 'load-test-%'; \
+		    DELETE FROM shows WHERE id LIKE 'load-test-%'; \
+		    DELETE FROM events WHERE id LIKE 'load-test-%'; \
+		    DELETE FROM users WHERE id LIKE 'load-test-%'; \
+		    DELETE FROM tenants WHERE id = 'load-test-tenant';"
+	@echo "Cleaning Redis..."
+	@docker run --rm redis:7-alpine redis-cli -h $${REDIS_HOST:-100.104.0.42} -a "$${REDIS_PASSWORD}" --no-auth-warning \
+		KEYS "zone:availability:load-test-*" | xargs -r docker run --rm redis:7-alpine redis-cli -h $${REDIS_HOST:-100.104.0.42} -a "$${REDIS_PASSWORD}" --no-auth-warning DEL || true
+	@echo "$(GREEN)Cleanup complete!$(NC)"
 
 # ================================
 # Code Quality

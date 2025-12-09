@@ -18,26 +18,37 @@ const serverErrors = new Counter('server_errors');
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8083';
 const AUTH_TOKEN = __ENV.AUTH_TOKEN || 'test-token';
 
-// Test data - loaded from shared array for efficiency
-const testData = new SharedArray('test_data', function () {
-    // This will be loaded from seed_data.json if exists
-    // Otherwise use default test data
-    try {
-        return JSON.parse(open('./seed_data.json'));
-    } catch (e) {
-        // Default test data
-        return {
-            eventIds: ['event-1', 'event-2', 'event-3'],
-            zoneIds: ['zone-1', 'zone-2', 'zone-3', 'zone-4', 'zone-5'],
-            userIds: Array.from({ length: 10000 }, (_, i) => `user-${i + 1}`)
-        };
-    }
+// Load test data from JSON file
+let testDataConfig;
+try {
+    testDataConfig = JSON.parse(open('./seed_data.json'));
+} catch (e) {
+    // Default test data
+    testDataConfig = {
+        eventIds: ['load-test-event-1', 'load-test-event-2', 'load-test-event-3'],
+        zoneIds: [
+            'load-test-zone-1-1', 'load-test-zone-1-2', 'load-test-zone-1-3',
+            'load-test-zone-2-1', 'load-test-zone-2-2', 'load-test-zone-2-3',
+            'load-test-zone-3-1', 'load-test-zone-3-2', 'load-test-zone-3-3'
+        ],
+        userIds: []
+    };
+}
+
+// Generate user IDs if not provided
+const NUM_USERS = 10000;
+const userIdsArray = testDataConfig.userIds && testDataConfig.userIds.length > 0
+    ? testDataConfig.userIds
+    : Array.from({ length: NUM_USERS }, (_, i) => `load-test-user-${i + 1}`);
+
+// SharedArray requires returning an array
+const userIds = new SharedArray('user_ids', function () {
+    return userIdsArray;
 });
 
-// Get test data
-const eventIds = testData.eventIds || testData[0]?.eventIds || ['event-1'];
-const zoneIds = testData.zoneIds || testData[0]?.zoneIds || ['zone-1'];
-const userIds = testData.userIds || testData[0]?.userIds || ['user-1'];
+// Direct arrays for event and zone IDs (small enough to not need SharedArray)
+const eventIds = testDataConfig.eventIds;
+const zoneIds = testDataConfig.zoneIds;
 
 // Test scenarios configuration
 export const options = {
@@ -139,7 +150,9 @@ export default function () {
 
 // Reserve seats function
 export function reserveSeats() {
-    const userId = randomItem(userIds);
+    // SharedArray must be accessed by index
+    const userIndex = randomIntBetween(0, userIds.length - 1);
+    const userId = userIds[userIndex];
     const eventId = randomItem(eventIds);
     const zoneId = randomItem(zoneIds);
     const quantity = randomIntBetween(1, 4);
