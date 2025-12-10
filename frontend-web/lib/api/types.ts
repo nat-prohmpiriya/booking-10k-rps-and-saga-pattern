@@ -81,6 +81,7 @@ export interface EventResponse {
   is_public: boolean
   meta_title: string
   meta_description: string
+  min_price: number
   published_at?: string
   created_at: string
   updated_at: string

@@ -4,36 +4,37 @@ import "time"
 
 // Event represents an event in the system
 type Event struct {
-	ID               string     `json:"id"`
-	TenantID         string     `json:"tenant_id"`
-	OrganizerID      string     `json:"organizer_id"`
-	CategoryID       *string    `json:"category_id,omitempty"`
-	Name             string     `json:"name"`
-	Slug             string     `json:"slug"`
-	Description      string     `json:"description"`
-	ShortDescription string     `json:"short_description"`
-	PosterURL        string     `json:"poster_url"`
-	BannerURL        string     `json:"banner_url"`
-	Gallery          []string   `json:"gallery"`
-	VenueName        string     `json:"venue_name"`
-	VenueAddress     string     `json:"venue_address"`
-	City             string     `json:"city"`
-	Country          string     `json:"country"`
-	Latitude         *float64   `json:"latitude,omitempty"`
-	Longitude        *float64   `json:"longitude,omitempty"`
-	MaxTicketsPerUser int       `json:"max_tickets_per_user"`
-	BookingStartAt   *time.Time `json:"booking_start_at,omitempty"`
-	BookingEndAt     *time.Time `json:"booking_end_at,omitempty"`
-	Status           string     `json:"status"` // draft, published, cancelled, completed
-	IsFeatured       bool       `json:"is_featured"`
-	IsPublic         bool       `json:"is_public"`
-	MetaTitle        string     `json:"meta_title"`
-	MetaDescription  string     `json:"meta_description"`
-	Settings         string     `json:"settings"` // JSON string
-	PublishedAt      *time.Time `json:"published_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
-	DeletedAt        *time.Time `json:"deleted_at,omitempty"`
+	ID                string     `json:"id"`
+	TenantID          string     `json:"tenant_id"`
+	OrganizerID       string     `json:"organizer_id"`
+	CategoryID        *string    `json:"category_id,omitempty"`
+	Name              string     `json:"name"`
+	Slug              string     `json:"slug"`
+	Description       string     `json:"description"`
+	ShortDescription  string     `json:"short_description"`
+	PosterURL         string     `json:"poster_url"`
+	BannerURL         string     `json:"banner_url"`
+	Gallery           []string   `json:"gallery"`
+	VenueName         string     `json:"venue_name"`
+	VenueAddress      string     `json:"venue_address"`
+	City              string     `json:"city"`
+	Country           string     `json:"country"`
+	Latitude          *float64   `json:"latitude,omitempty"`
+	Longitude         *float64   `json:"longitude,omitempty"`
+	MaxTicketsPerUser int        `json:"max_tickets_per_user"`
+	BookingStartAt    *time.Time `json:"booking_start_at,omitempty"`
+	BookingEndAt      *time.Time `json:"booking_end_at,omitempty"`
+	Status            string     `json:"status"` // draft, published, cancelled, completed
+	IsFeatured        bool       `json:"is_featured"`
+	IsPublic          bool       `json:"is_public"`
+	MetaTitle         string     `json:"meta_title"`
+	MetaDescription   string     `json:"meta_description"`
+	Settings          string     `json:"settings"`  // JSON string
+	MinPrice          float64    `json:"min_price"` // Minimum ticket price from all shows
+	PublishedAt       *time.Time `json:"published_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	DeletedAt         *time.Time `json:"deleted_at,omitempty"`
 }
 
 // EventStatus constants
@@ -86,20 +87,20 @@ const (
 
 // TicketType represents a type of ticket for an event
 type TicketType struct {
-	ID             string    `json:"id"`
-	EventID        string    `json:"event_id"`
-	ZoneID         string    `json:"zone_id"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description"`
-	Price          float64   `json:"price"`
-	TotalQuantity  int       `json:"total_quantity"`
-	SoldQuantity   int       `json:"sold_quantity"`
-	MaxPerBooking  int       `json:"max_per_booking"`
-	SaleStartTime  time.Time `json:"sale_start_time"`
-	SaleEndTime    time.Time `json:"sale_end_time"`
-	Status         string    `json:"status"` // active, sold_out, inactive
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	EventID       string    `json:"event_id"`
+	ZoneID        string    `json:"zone_id"`
+	Name          string    `json:"name"`
+	Description   string    `json:"description"`
+	Price         float64   `json:"price"`
+	TotalQuantity int       `json:"total_quantity"`
+	SoldQuantity  int       `json:"sold_quantity"`
+	MaxPerBooking int       `json:"max_per_booking"`
+	SaleStartTime time.Time `json:"sale_start_time"`
+	SaleEndTime   time.Time `json:"sale_end_time"`
+	Status        string    `json:"status"` // active, sold_out, inactive
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // TicketTypeStatus constants
@@ -157,7 +158,7 @@ const (
 type ShowZone struct {
 	ID             string     `json:"id"`
 	ShowID         string     `json:"show_id"`
-	Name           string     `json:"name"`            // e.g. "VIP", "Standard", "Standing"
+	Name           string     `json:"name"` // e.g. "VIP", "Standard", "Standing"
 	Description    string     `json:"description"`
 	Color          string     `json:"color"`           // Color code for UI (e.g. "#FFD700")
 	Price          float64    `json:"price"`           // Price per ticket in this zone

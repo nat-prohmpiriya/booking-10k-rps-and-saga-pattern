@@ -244,6 +244,7 @@ func toEventResponse(event *domain.Event) *dto.EventResponse {
 		IsPublic:          event.IsPublic,
 		MetaTitle:         event.MetaTitle,
 		MetaDescription:   event.MetaDescription,
+		MinPrice:          event.MinPrice,
 		CreatedAt:         event.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:         event.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}

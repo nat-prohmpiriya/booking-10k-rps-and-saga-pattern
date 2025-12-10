@@ -43,7 +43,7 @@ function mapApiEventToDisplay(event: EventResponse): EventDisplay {
     fullDate: startDate.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
     image: event.poster_url || "/images/events/event-1.jpg",
     heroImage: event.banner_url || event.poster_url || "/images/events/event-1.jpg",
-    price: 0, // Will be fetched from show zones
+    price: event.min_price || 0,
     status: event.status,
     city: event.city,
     country: event.country,

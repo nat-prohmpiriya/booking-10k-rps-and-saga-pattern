@@ -42,6 +42,25 @@ const eventColumns = `id, tenant_id, organizer_id, category_id, name, slug,
 	COALESCE(settings, '{}'::jsonb) as settings,
 	published_at, created_at, updated_at, deleted_at`
 
+// eventColumnsWithPrice includes min_price for queries with price aggregation
+const eventColumnsWithPrice = `e.id, e.tenant_id, e.organizer_id, e.category_id, e.name, e.slug,
+	COALESCE(e.description, '') as description,
+	COALESCE(e.short_description, '') as short_description,
+	COALESCE(e.poster_url, '') as poster_url,
+	COALESCE(e.banner_url, '') as banner_url,
+	COALESCE(e.gallery, '[]'::jsonb) as gallery,
+	COALESCE(e.venue_name, '') as venue_name,
+	COALESCE(e.venue_address, '') as venue_address,
+	COALESCE(e.city, '') as city,
+	COALESCE(e.country, '') as country,
+	e.latitude, e.longitude, e.max_tickets_per_user, e.booking_start_at,
+	e.booking_end_at, e.status, e.is_featured, e.is_public,
+	COALESCE(e.meta_title, '') as meta_title,
+	COALESCE(e.meta_description, '') as meta_description,
+	COALESCE(e.settings, '{}'::jsonb) as settings,
+	COALESCE(MIN(sz.price), 0) as min_price,
+	e.published_at, e.created_at, e.updated_at, e.deleted_at`
+
 // scanEvent scans a row into an Event struct
 func (r *PostgresEventRepository) scanEvent(row pgx.Row) (*domain.Event, error) {
 	event := &domain.Event{}
@@ -75,6 +94,7 @@ func (r *PostgresEventRepository) scanEvent(row pgx.Row) (*domain.Event, error) 
 		&event.MetaTitle,
 		&event.MetaDescription,
 		&settingsJSON,
+		&event.MinPrice,
 		&event.PublishedAt,
 		&event.CreatedAt,
 		&event.UpdatedAt,
@@ -135,6 +155,7 @@ func (r *PostgresEventRepository) scanEvents(rows pgx.Rows) ([]*domain.Event, er
 			&event.MetaTitle,
 			&event.MetaDescription,
 			&settingsJSON,
+			&event.MinPrice,
 			&event.PublishedAt,
 			&event.CreatedAt,
 			&event.UpdatedAt,
@@ -333,7 +354,7 @@ func (r *PostgresEventRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// ListPublished lists all published events with pagination
+// ListPublished lists all published events with pagination and min price
 func (r *PostgresEventRepository) ListPublished(ctx context.Context, limit, offset int) ([]*domain.Event, int, error) {
 	// Count total
 	countQuery := `SELECT COUNT(*) FROM events WHERE status = $1 AND deleted_at IS NULL AND is_public = true`
@@ -343,13 +364,22 @@ func (r *PostgresEventRepository) ListPublished(ctx context.Context, limit, offs
 		return nil, 0, err
 	}
 
-	// Get events
+	// Get events with min_price from show_zones
 	query := fmt.Sprintf(`
-		SELECT %s FROM events
-		WHERE status = $1 AND deleted_at IS NULL AND is_public = true
-		ORDER BY created_at DESC
+		SELECT %s
+		FROM events e
+		LEFT JOIN shows s ON s.event_id = e.id AND s.deleted_at IS NULL
+		LEFT JOIN show_zones sz ON sz.show_id = s.id AND sz.deleted_at IS NULL
+		WHERE e.status = $1 AND e.deleted_at IS NULL AND e.is_public = true
+		GROUP BY e.id, e.tenant_id, e.organizer_id, e.category_id, e.name, e.slug,
+			e.description, e.short_description, e.poster_url, e.banner_url, e.gallery,
+			e.venue_name, e.venue_address, e.city, e.country, e.latitude, e.longitude,
+			e.max_tickets_per_user, e.booking_start_at, e.booking_end_at, e.status,
+			e.is_featured, e.is_public, e.meta_title, e.meta_description, e.settings,
+			e.published_at, e.created_at, e.updated_at, e.deleted_at
+		ORDER BY e.created_at DESC
 		LIMIT $2 OFFSET $3
-	`, eventColumns)
+	`, eventColumnsWithPrice)
 
 	rows, err := r.pool.Query(ctx, query, domain.EventStatusPublished, limit, offset)
 	if err != nil {

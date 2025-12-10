@@ -102,6 +102,7 @@ type EventResponse struct {
 	IsPublic          bool     `json:"is_public"`
 	MetaTitle         string   `json:"meta_title"`
 	MetaDescription   string   `json:"meta_description"`
+	MinPrice          float64  `json:"min_price"`
 	PublishedAt       *string  `json:"published_at,omitempty"`
 	CreatedAt         string   `json:"created_at"`
 	UpdatedAt         string   `json:"updated_at"`
