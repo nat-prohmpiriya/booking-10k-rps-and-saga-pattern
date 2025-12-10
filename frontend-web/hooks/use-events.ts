@@ -76,13 +76,16 @@ export function useEvents(filter?: EventListFilter): UseEventsReturn {
     setError(null)
     try {
       const response = await eventsApi.list(filter)
+
       // Response is now { data: EventResponse[], meta: { total, ... } }
       const eventsList = response.data || []
+
       const mappedEvents = eventsList.map(mapApiEventToDisplay)
+
       setEvents(mappedEvents)
       setTotal(response.meta?.total || 0)
     } catch (err) {
-      console.error("Failed to fetch events from API:", err)
+      console.error("❌ Failed to fetch events from API:", err)
       setError("Failed to load events. Please try again later.")
       setEvents([])
       setTotal(0)

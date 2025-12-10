@@ -31,8 +31,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setIsLoading(false)
 
+    // Listen for unauthorized events (handled by axios interceptor)
     const handleUnauthorized = () => {
       setUser(null)
+      setError("Session expired. Please login again.")
     }
 
     window.addEventListener("auth:unauthorized", handleUnauthorized)

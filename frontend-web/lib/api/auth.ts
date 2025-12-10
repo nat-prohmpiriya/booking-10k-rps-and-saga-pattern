@@ -29,22 +29,24 @@ export const authApi = {
   },
 
   async refreshToken(): Promise<AuthResponse> {
-    const refreshToken = typeof window !== "undefined"
-      ? localStorage.getItem("refresh_token")
-      : null
-
+    const refreshToken = apiClient.getRefreshToken()
     if (!refreshToken) {
       throw new Error("No refresh token available")
     }
 
     const data: RefreshTokenRequest = { refresh_token: refreshToken }
     const response = await apiClient.post<AuthResponse>("/auth/refresh", data)
+    
     apiClient.setAccessToken(response.access_token)
     if (typeof window !== "undefined") {
       localStorage.setItem("refresh_token", response.refresh_token)
       localStorage.setItem("user", JSON.stringify(response.user))
     }
     return response
+  },
+
+  async getCurrentUser(): Promise<UserResponse> {
+    return apiClient.get<UserResponse>("/auth/me")
   },
 
   logout() {

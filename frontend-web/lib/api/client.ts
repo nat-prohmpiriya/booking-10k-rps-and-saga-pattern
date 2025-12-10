@@ -1,29 +1,154 @@
+import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from "axios"
 import type { ApiError } from "./types"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1"
 
-type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
-
-interface RequestOptions {
-  method?: HttpMethod
-  body?: unknown
-  headers?: Record<string, string>
-  requireAuth?: boolean
-}
-
 class ApiClient {
-  private baseUrl: string
-  private accessToken: string | null = null
+  private axiosInstance: AxiosInstance
+  private isRefreshing = false
+  private failedQueue: Array<{
+    resolve: (token: string) => void
+    reject: (error: Error) => void
+  }> = []
 
   constructor(baseUrl: string) {
-    this.baseUrl = baseUrl
-    if (typeof window !== "undefined") {
-      this.accessToken = localStorage.getItem("access_token")
-    }
+    // Create Axios instance with base configuration
+    this.axiosInstance = axios.create({
+      baseURL: baseUrl,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      withCredentials: true,
+    })
+
+    this.setupInterceptors()
+  }
+
+  private setupInterceptors() {
+    // Request interceptor: Inject JWT token
+    this.axiosInstance.interceptors.request.use(
+      (config: InternalAxiosRequestConfig) => {
+        const token = this.getAccessToken()
+        if (token && config.headers) {
+          config.headers.Authorization = `Bearer ${token}`
+        }
+        return config
+      },
+      (error) => {
+        return Promise.reject(error)
+      }
+    )
+
+    // Response interceptor: Handle errors and token refresh
+    this.axiosInstance.interceptors.response.use(
+      (response) => {
+        // Backend wraps response in { success: boolean, data: T }
+        const data = response.data
+
+        if (data && typeof data === "object" && "success" in data) {
+          // Paginated response with meta
+          if ("meta" in data) {
+            const result = { data: data.data, meta: data.meta }
+            // Assign back to response.data and return response object
+            response.data = result
+            return response
+          }
+          // Regular response with data wrapper
+          if ("data" in data) {
+            // Assign back to response.data and return response object
+            response.data = data.data
+            return response
+          }
+        }
+        return response
+      },
+      async (error: AxiosError<ApiError>) => {
+        const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+
+        // Handle 401 Unauthorized with token refresh
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          if (this.isRefreshing) {
+            // Queue the request while refresh is in progress
+            return new Promise((resolve, reject) => {
+              this.failedQueue.push({ resolve, reject })
+            })
+              .then((token) => {
+                if (originalRequest.headers) {
+                  originalRequest.headers.Authorization = `Bearer ${token}`
+                }
+                return this.axiosInstance(originalRequest)
+              })
+              .catch((err) => {
+                return Promise.reject(err)
+              })
+          }
+
+          originalRequest._retry = true
+          this.isRefreshing = true
+
+          try {
+            const refreshToken = this.getRefreshToken()
+            if (!refreshToken) {
+              throw new Error("No refresh token available")
+            }
+
+            // Attempt to refresh the token
+            const response = await axios.post(
+              `${API_BASE_URL}/auth/refresh`,
+              { refresh_token: refreshToken },
+              { withCredentials: true }
+            )
+
+            const { access_token, refresh_token: newRefreshToken, user } = response.data.data || response.data
+
+            // Update tokens
+            this.setAccessToken(access_token)
+            if (typeof window !== "undefined") {
+              localStorage.setItem("refresh_token", newRefreshToken)
+              localStorage.setItem("user", JSON.stringify(user))
+            }
+
+            // Process queued requests
+            this.failedQueue.forEach((promise) => promise.resolve(access_token))
+            this.failedQueue = []
+
+            // Retry original request
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${access_token}`
+            }
+            return this.axiosInstance(originalRequest)
+          } catch (refreshError) {
+            // Refresh failed - clear tokens and redirect
+            this.failedQueue.forEach((promise) => promise.reject(refreshError as Error))
+            this.failedQueue = []
+            this.clearTokens()
+
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("auth:unauthorized"))
+            }
+
+            return Promise.reject(refreshError)
+          } finally {
+            this.isRefreshing = false
+          }
+        }
+
+        // Handle other errors
+        const errorData = error.response?.data || {
+          error: error.message,
+          message: error.message,
+        }
+
+        throw new ApiRequestError(
+          errorData.message || errorData.error || error.message,
+          error.response?.status || 500,
+          errorData.code
+        )
+      }
+    )
   }
 
   setAccessToken(token: string | null) {
-    this.accessToken = token
     if (typeof window !== "undefined") {
       if (token) {
         localStorage.setItem("access_token", token)
@@ -34,14 +159,20 @@ class ApiClient {
   }
 
   getAccessToken(): string | null {
-    if (typeof window !== "undefined" && !this.accessToken) {
-      this.accessToken = localStorage.getItem("access_token")
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("access_token")
     }
-    return this.accessToken
+    return null
+  }
+
+  getRefreshToken(): string | null {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("refresh_token")
+    }
+    return null
   }
 
   clearTokens() {
-    this.accessToken = null
     if (typeof window !== "undefined") {
       localStorage.removeItem("access_token")
       localStorage.removeItem("refresh_token")
@@ -49,99 +180,35 @@ class ApiClient {
     }
   }
 
-  private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { method = "GET", body, headers = {}, requireAuth = false } = options
-
-    const requestHeaders: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...headers,
-    }
-
-    if (requireAuth || this.accessToken) {
-      const token = this.getAccessToken()
-      if (token) {
-        requestHeaders["Authorization"] = `Bearer ${token}`
-      } else if (requireAuth) {
-        throw new Error("Authentication required")
-      }
-    }
-
-    const config: RequestInit = {
-      method,
-      headers: requestHeaders,
-      credentials: "include",
-    }
-
-    if (body && method !== "GET") {
-      config.body = JSON.stringify(body)
-    }
-
-    const url = `${this.baseUrl}${endpoint}`
-    const response = await fetch(url, config)
-
-    if (!response.ok) {
-      let errorData: ApiError
-      try {
-        errorData = await response.json()
-      } catch {
-        errorData = {
-          error: response.statusText,
-          message: `Request failed with status ${response.status}`,
-        }
-      }
-
-      if (response.status === 401) {
-        this.clearTokens()
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("auth:unauthorized"))
-        }
-      }
-
-      throw new ApiRequestError(
-        errorData.message || errorData.error,
-        response.status,
-        errorData.code
-      )
-    }
-
-    if (response.status === 204) {
-      return {} as T
-    }
-
-    const json = await response.json()
-    // Backend wraps response in { success: boolean, data: T }
-    // For paginated responses: { success: boolean, data: T[], meta: {...} }
-    if (json && typeof json === "object" && "success" in json) {
-      // Paginated response with meta
-      if ("meta" in json) {
-        return { data: json.data, meta: json.meta } as T
-      }
-      // Regular response with data wrapper
-      if ("data" in json) {
-        return json.data as T
-      }
-    }
-    return json as T
+  // Convenience methods
+  async get<T>(endpoint: string, config = {}): Promise<T> {
+    const response = await this.axiosInstance.get<T>(endpoint, config)
+    return response.data
   }
 
-  async get<T>(endpoint: string, options?: Omit<RequestOptions, "method" | "body">): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: "GET" })
+  async post<T>(endpoint: string, data?: unknown, config = {}): Promise<T> {
+    const response = await this.axiosInstance.post<T>(endpoint, data, config)
+    return response.data
   }
 
-  async post<T>(endpoint: string, body?: unknown, options?: Omit<RequestOptions, "method" | "body">): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: "POST", body })
+  async put<T>(endpoint: string, data?: unknown, config = {}): Promise<T> {
+    const response = await this.axiosInstance.put<T>(endpoint, data, config)
+    return response.data
   }
 
-  async put<T>(endpoint: string, body?: unknown, options?: Omit<RequestOptions, "method" | "body">): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: "PUT", body })
+  async patch<T>(endpoint: string, data?: unknown, config = {}): Promise<T> {
+    const response = await this.axiosInstance.patch<T>(endpoint, data, config)
+    return response.data
   }
 
-  async patch<T>(endpoint: string, body?: unknown, options?: Omit<RequestOptions, "method" | "body">): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: "PATCH", body })
+  async delete<T>(endpoint: string, config = {}): Promise<T> {
+    const response = await this.axiosInstance.delete<T>(endpoint, config)
+    return response.data
   }
 
-  async delete<T>(endpoint: string, options?: Omit<RequestOptions, "method" | "body">): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: "DELETE" })
+  // Get the axios instance for advanced usage
+  getAxiosInstance(): AxiosInstance {
+    return this.axiosInstance
   }
 }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Header } from "@/components/header"
 import { EventCard } from "@/components/event-card"
 import { useEvents } from "@/hooks/use-events"
@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Filter, Calendar, MapPin, Grid3X3, List, SlidersHorizontal } from "lucide-react"
+import { Search, Filter, Calendar, MapPin, Grid3X3, List, SlidersHorizontal, ChevronLeft, ChevronRight } from "lucide-react"
 
 function EventCardSkeleton() {
   return (
@@ -56,34 +56,146 @@ function EventListSkeleton() {
 
 type ViewMode = "grid" | "list"
 
+const ITEMS_PER_PAGE = 9
+
 export default function EventsPage() {
   const { events, isLoading, total } = useEvents()
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState("date")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [showFilters, setShowFilters] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
 
-  // Filter events based on search query
-  const filteredEvents = events.filter((event) => {
-    const matchesSearch =
-      event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.venue.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesSearch
-  })
+  // Filter states
+  const [categoryFilter, setCategoryFilter] = useState("all")
+  const [dateRangeFilter, setDateRangeFilter] = useState("all")
+  const [priceRangeFilter, setPriceRangeFilter] = useState("all")
+  const [locationFilter, setLocationFilter] = useState("all")
 
-  // Sort events
-  const sortedEvents = [...filteredEvents].sort((a, b) => {
-    switch (sortBy) {
-      case "price-low":
-        return a.price - b.price
-      case "price-high":
-        return b.price - a.price
-      case "name":
-        return a.title.localeCompare(b.title)
-      default: // date
-        return new Date(a.date).getTime() - new Date(b.date).getTime()
+  // Filter and sort events
+  const { filteredAndSortedEvents, totalPages } = useMemo(() => {
+    // Apply all filters
+    let filtered = events.filter((event) => {
+      // Search filter
+      const matchesSearch =
+        event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.venue.toLowerCase().includes(searchQuery.toLowerCase())
+
+      // Category filter (based on event title keywords)
+      const matchesCategory = categoryFilter === "all" || (() => {
+        const title = event.title.toLowerCase()
+        switch (categoryFilter) {
+          case "concert":
+            return title.includes("concert") || title.includes("music") || title.includes("festival")
+          case "sports":
+            return title.includes("sport") || title.includes("match") || title.includes("game")
+          case "theater":
+            return title.includes("theater") || title.includes("play") || title.includes("show")
+          case "festival":
+            return title.includes("festival") || title.includes("fest")
+          default:
+            return true
+        }
+      })()
+
+      // Date range filter
+      const matchesDateRange = dateRangeFilter === "all" || (() => {
+        const eventDate = new Date(event.fullDate || event.date)
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+
+        switch (dateRangeFilter) {
+          case "today":
+            const todayEnd = new Date(today)
+            todayEnd.setDate(todayEnd.getDate() + 1)
+            return eventDate >= today && eventDate < todayEnd
+          case "week":
+            const weekEnd = new Date(today)
+            weekEnd.setDate(weekEnd.getDate() + 7)
+            return eventDate >= today && eventDate < weekEnd
+          case "month":
+            const monthEnd = new Date(today)
+            monthEnd.setMonth(monthEnd.getMonth() + 1)
+            return eventDate >= today && eventDate < monthEnd
+          case "year":
+            const yearEnd = new Date(today)
+            yearEnd.setFullYear(yearEnd.getFullYear() + 1)
+            return eventDate >= today && eventDate < yearEnd
+          default:
+            return true
+        }
+      })()
+
+      // Price range filter
+      const matchesPriceRange = priceRangeFilter === "all" || (() => {
+        const price = event.price
+        switch (priceRangeFilter) {
+          case "free":
+            return price === 0
+          case "0-500":
+            return price >= 0 && price <= 500
+          case "500-2000":
+            return price > 500 && price <= 2000
+          case "2000+":
+            return price > 2000
+          default:
+            return true
+        }
+      })()
+
+      // Location filter
+      const matchesLocation = locationFilter === "all" || (() => {
+        const venue = event.venue.toLowerCase()
+        const city = event.city?.toLowerCase() || ""
+        return venue.includes(locationFilter.toLowerCase()) || city.includes(locationFilter.toLowerCase())
+      })()
+
+      return matchesSearch && matchesCategory && matchesDateRange && matchesPriceRange && matchesLocation
+    })
+
+    // Sort events
+    const sorted = [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case "price-low":
+          return a.price - b.price
+        case "price-high":
+          return b.price - a.price
+        case "name":
+          return a.title.localeCompare(b.title)
+        default: // date
+          return new Date(a.fullDate || a.date).getTime() - new Date(b.fullDate || b.date).getTime()
+      }
+    })
+
+    const pages = Math.ceil(sorted.length / ITEMS_PER_PAGE)
+
+    return {
+      filteredAndSortedEvents: sorted,
+      totalPages: pages
     }
-  })
+  }, [events, searchQuery, categoryFilter, dateRangeFilter, priceRangeFilter, locationFilter, sortBy])
+
+  // Paginate events
+  const paginatedEvents = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+    const endIndex = startIndex + ITEMS_PER_PAGE
+    return filteredAndSortedEvents.slice(startIndex, endIndex)
+  }, [filteredAndSortedEvents, currentPage])
+
+  // Reset to page 1 when filters change
+  const handleFilterChange = () => {
+    setCurrentPage(1)
+  }
+
+  const clearAllFilters = () => {
+    setCategoryFilter("all")
+    setDateRangeFilter("all")
+    setPriceRangeFilter("all")
+    setLocationFilter("all")
+    setSearchQuery("")
+    setSortBy("date")
+    setCurrentPage(1)
+  }
 
   return (
     <main className="min-h-screen bg-background">
@@ -136,7 +248,7 @@ export default function EventsPage() {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-4">
             <p className="text-muted-foreground">
-              <span className="text-foreground font-semibold">{sortedEvents.length}</span> events found
+              <span className="text-foreground font-semibold">{filteredAndSortedEvents.length}</span> events found
             </p>
           </div>
 
@@ -195,7 +307,7 @@ export default function EventsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Category</label>
-                <Select>
+                <Select value={categoryFilter} onValueChange={(value) => { setCategoryFilter(value); handleFilterChange(); }}>
                   <SelectTrigger className="border-primary/30">
                     <SelectValue placeholder="All Categories" />
                   </SelectTrigger>
@@ -210,7 +322,7 @@ export default function EventsPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Date Range</label>
-                <Select>
+                <Select value={dateRangeFilter} onValueChange={(value) => { setDateRangeFilter(value); handleFilterChange(); }}>
                   <SelectTrigger className="border-primary/30">
                     <SelectValue placeholder="Any Date" />
                   </SelectTrigger>
@@ -225,7 +337,7 @@ export default function EventsPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Price Range</label>
-                <Select>
+                <Select value={priceRangeFilter} onValueChange={(value) => { setPriceRangeFilter(value); handleFilterChange(); }}>
                   <SelectTrigger className="border-primary/30">
                     <SelectValue placeholder="Any Price" />
                   </SelectTrigger>
@@ -240,7 +352,7 @@ export default function EventsPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Location</label>
-                <Select>
+                <Select value={locationFilter} onValueChange={(value) => { setLocationFilter(value); handleFilterChange(); }}>
                   <SelectTrigger className="border-primary/30">
                     <SelectValue placeholder="All Locations" />
                   </SelectTrigger>
@@ -255,10 +367,10 @@ export default function EventsPage() {
               </div>
             </div>
             <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" size="sm" className="border-primary/50">
+              <Button variant="outline" size="sm" className="border-primary/50" onClick={clearAllFilters}>
                 Clear All
               </Button>
-              <Button size="sm" className="bg-linear-to-r from-primary to-amber-400 text-primary-foreground">
+              <Button size="sm" className="bg-linear-to-r from-primary to-amber-400 text-primary-foreground" onClick={() => setShowFilters(false)}>
                 Apply Filters
               </Button>
             </div>
@@ -280,37 +392,104 @@ export default function EventsPage() {
               ))}
             </div>
           )
-        ) : sortedEvents.length > 0 ? (
-          viewMode === "grid" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
-              {sortedEvents.map((event) => (
-                <EventCard
-                  key={event.id}
-                  id={event.id}
-                  title={event.title}
-                  venue={event.venue}
-                  date={event.date}
-                  price={event.price}
-                  image={event.image}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {sortedEvents.map((event) => (
-                <EventListCard
-                  key={event.id}
-                  id={event.id}
-                  title={event.title}
-                  subtitle={event.subtitle}
-                  venue={event.venue}
-                  date={event.date}
-                  price={event.price}
-                  image={event.image}
-                />
-              ))}
-            </div>
-          )
+        ) : paginatedEvents.length > 0 ? (
+          <>
+            {viewMode === "grid" ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+                {paginatedEvents.map((event) => (
+                  <EventCard
+                    key={event.id}
+                    id={event.id}
+                    title={event.title}
+                    venue={event.venue}
+                    date={event.date}
+                    price={event.price}
+                    image={event.image}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {paginatedEvents.map((event) => (
+                  <EventListCard
+                    key={event.id}
+                    id={event.id}
+                    title={event.title}
+                    subtitle={event.subtitle}
+                    venue={event.venue}
+                    date={event.date}
+                    price={event.price}
+                    image={event.image}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-12">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="border-primary/30 hover:bg-primary/10"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Previous
+                </Button>
+
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                    // Show first page, last page, current page, and pages around current page
+                    const showPage =
+                      page === 1 ||
+                      page === totalPages ||
+                      (page >= currentPage - 1 && page <= currentPage + 1)
+
+                    if (!showPage) {
+                      // Show ellipsis
+                      if (page === currentPage - 2 || page === currentPage + 2) {
+                        return (
+                          <span key={page} className="px-2 text-muted-foreground">
+                            ...
+                          </span>
+                        )
+                      }
+                      return null
+                    }
+
+                    return (
+                      <Button
+                        key={page}
+                        variant={currentPage === page ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(page)}
+                        className={
+                          currentPage === page
+                            ? "bg-linear-to-r from-primary to-amber-400 text-primary-foreground border-0"
+                            : "border-primary/30 hover:bg-primary/10"
+                        }
+                      >
+                        {page}
+                      </Button>
+                    )
+                  })}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="border-primary/30 hover:bg-primary/10"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="text-center py-16 space-y-4">
             <div className="glass inline-block p-6 rounded-full">
@@ -321,13 +500,10 @@ export default function EventsPage() {
               We couldn&apos;t find any events matching your search. Try adjusting your filters or search terms.
             </p>
             <Button
-              onClick={() => {
-                setSearchQuery("")
-                setSortBy("date")
-              }}
+              onClick={clearAllFilters}
               className="mt-4 bg-linear-to-r from-primary to-amber-400 text-primary-foreground"
             >
-              Clear Search
+              Clear All Filters
             </Button>
           </div>
         )}
