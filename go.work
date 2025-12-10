@@ -1,11 +1,11 @@
-go 1.24.11
+go 1.24.0
 
 use (
-	./apps/api-gateway
-	./apps/auth-service
-	./apps/booking-service
-	./apps/payment-service
-	./apps/ticket-service
+	./api-gateway-srv
+	./auth-srv
+	./booking-srv
+	./payment-srv
+	./ticket-srv
 	./pkg
 	./pkg/saga
 	./scripts

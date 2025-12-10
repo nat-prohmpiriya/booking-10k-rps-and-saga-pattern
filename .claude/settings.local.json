@@ -31,7 +31,9 @@
       "Bash(k6 version:*)",
       "Bash(k6 inspect:*)",
       "Bash(INTEGRATION_TEST=true TEST_REDIS_HOST=100.104.0.42 TEST_REDIS_PASSWORD=booking_rush_redis_2024 go test:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

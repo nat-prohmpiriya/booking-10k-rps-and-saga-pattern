@@ -703,7 +703,7 @@
 
 ---
 
-## Phase 4: Payment & Saga Pattern
+## [x] Phase 4: Payment & Saga Pattern
 
 **Goal:** Complete payment flow with data consistency using Saga
 
@@ -1145,7 +1145,7 @@
 
 ---
 
-## Phase 7: Frontend
+## Phase [ ] 7: Frontend
 
 **Goal:** User-facing web application
 
