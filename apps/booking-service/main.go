@@ -19,6 +19,7 @@ import (
 	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/config"
 	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/database"
 	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/logger"
+	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/middleware"
 	pkgredis "github.com/prohmpiriya/booking-rush-10k-rps/pkg/redis"
 )
 
@@ -177,14 +178,22 @@ func main() {
 		// Booking routes - simplified middleware for performance
 		bookings := v1.Group("/bookings")
 		bookings.Use(userIDMiddleware()) // Extract user_id from header
+
+		// Configure idempotency middleware for write operations
+		idempotencyConfig := middleware.DefaultIdempotencyConfig(redisClient.Client())
+		idempotencyConfig.SkipPaths = []string{"/health", "/ready", "/metrics"}
+
 		{
-			bookings.POST("/reserve", container.BookingHandler.ReserveSeats)
+			// Write operations with idempotency
+			bookings.POST("/reserve", middleware.IdempotencyMiddleware(idempotencyConfig), container.BookingHandler.ReserveSeats)
+			bookings.POST("/:id/confirm", middleware.IdempotencyMiddleware(idempotencyConfig), container.BookingHandler.ConfirmBooking)
+			bookings.POST("/:id/cancel", middleware.IdempotencyMiddleware(idempotencyConfig), container.BookingHandler.CancelBooking)
+			bookings.DELETE("/:id", middleware.IdempotencyMiddleware(idempotencyConfig), container.BookingHandler.ReleaseBooking)
+
+			// Read operations without idempotency
 			bookings.GET("", container.BookingHandler.GetUserBookings)
 			bookings.GET("/pending", container.BookingHandler.GetPendingBookings)
 			bookings.GET("/:id", container.BookingHandler.GetBooking)
-			bookings.POST("/:id/confirm", container.BookingHandler.ConfirmBooking)
-			bookings.POST("/:id/cancel", container.BookingHandler.CancelBooking)
-			bookings.DELETE("/:id", container.BookingHandler.ReleaseBooking)
 		}
 	}
 

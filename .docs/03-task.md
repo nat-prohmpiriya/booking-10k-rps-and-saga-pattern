@@ -833,18 +833,18 @@
 
 ---
 
-### [ ]  P4-09: Idempotency Implementation
+### [x]  P4-09: Idempotency Implementation
 | Field | Value |
 |-------|-------|
 | **Description** | Implement idempotency for all write operations |
 | **Technical Context** | `pkg/middleware/idempotency.go` |
 | **Acceptance Criteria** | - Idempotency key from header/body<br>- Store in Redis (24h TTL)<br>- Return cached response for duplicates |
 
-- [ ] Create idempotency middleware
-- [ ] Store request hash in Redis
-- [ ] Return cached response for duplicates
-- [ ] Add to booking and payment endpoints
-- [ ] Write tests
+- [x] Create idempotency middleware
+- [x] Store request hash in Redis
+- [x] Return cached response for duplicates
+- [x] Add to booking and payment endpoints
+- [x] Write tests
 
 ---
 

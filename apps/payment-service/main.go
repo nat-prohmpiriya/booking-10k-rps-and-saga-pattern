@@ -20,6 +20,7 @@ import (
 	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/config"
 	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/database"
 	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/logger"
+	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/middleware"
 	pkgredis "github.com/prohmpiriya/booking-rush-10k-rps/pkg/redis"
 )
 
@@ -182,12 +183,30 @@ func main() {
 		// Payment routes
 		if container.PaymentHandler != nil {
 			payments := v1.Group("/payments")
+
+			// Configure idempotency middleware for write operations
+			var idempotencyConfig *middleware.IdempotencyConfig
+			if redisClient != nil {
+				idempotencyConfig = middleware.DefaultIdempotencyConfig(redisClient.Client())
+				idempotencyConfig.SkipPaths = []string{"/health", "/ready"}
+			}
+
 			{
-				payments.POST("", container.PaymentHandler.CreatePayment)
+				// Write operations with idempotency (if Redis available)
+				if idempotencyConfig != nil {
+					payments.POST("", middleware.IdempotencyMiddleware(idempotencyConfig), container.PaymentHandler.CreatePayment)
+					payments.POST("/:id/process", middleware.IdempotencyMiddleware(idempotencyConfig), container.PaymentHandler.ProcessPayment)
+					payments.POST("/:id/refund", middleware.IdempotencyMiddleware(idempotencyConfig), container.PaymentHandler.RefundPayment)
+					payments.POST("/:id/cancel", middleware.IdempotencyMiddleware(idempotencyConfig), container.PaymentHandler.CancelPayment)
+				} else {
+					payments.POST("", container.PaymentHandler.CreatePayment)
+					payments.POST("/:id/process", container.PaymentHandler.ProcessPayment)
+					payments.POST("/:id/refund", container.PaymentHandler.RefundPayment)
+					payments.POST("/:id/cancel", container.PaymentHandler.CancelPayment)
+				}
+
+				// Read operations without idempotency
 				payments.GET("/:id", container.PaymentHandler.GetPayment)
-				payments.POST("/:id/process", container.PaymentHandler.ProcessPayment)
-				payments.POST("/:id/refund", container.PaymentHandler.RefundPayment)
-				payments.POST("/:id/cancel", container.PaymentHandler.CancelPayment)
 				payments.GET("/booking/:bookingId", container.PaymentHandler.GetPaymentByBookingID)
 				payments.GET("/user/:userId", container.PaymentHandler.GetUserPayments)
 			}
