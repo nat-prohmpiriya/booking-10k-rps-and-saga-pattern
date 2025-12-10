@@ -3,14 +3,18 @@
 import type React from "react"
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Logo } from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { SocialLoginButtons } from "@/components/social-login-buttons"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function LoginPage() {
+  const router = useRouter()
+  const { login, isLoading, error: authError, clearError } = useAuth()
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -37,13 +41,14 @@ export default function LoginPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
+    clearError()
 
     const error = validateField(name, value)
     setErrors((prev) => ({ ...prev, [name]: error }))
     setSuccess((prev) => ({ ...prev, [name]: !error && value.length > 0 }))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const newErrors: Record<string, string> = {}
     Object.keys(formData).forEach((key) => {
@@ -54,7 +59,12 @@ export default function LoginPage() {
     })
 
     if (Object.keys(newErrors).length === 0) {
-      console.log("Login successful", formData)
+      try {
+        await login({ email: formData.email, password: formData.password })
+        router.push("/")
+      } catch {
+        // Error is handled in auth context
+      }
     } else {
       setErrors(newErrors)
     }
@@ -87,6 +97,11 @@ export default function LoginPage() {
           <p className="text-muted-foreground text-center mb-8">Sign in to book your next experience</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            {authError && (
+              <div className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
+                {authError}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email" className="text-foreground">
                 Email
@@ -141,9 +156,10 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full bg-linear-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:via-primary/80 hover:to-primary/70 text-primary-foreground font-semibold shadow-lg shadow-primary/20 transition-all"
+              disabled={isLoading}
+              className="w-full bg-linear-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:via-primary/80 hover:to-primary/70 text-primary-foreground font-semibold shadow-lg shadow-primary/20 transition-all disabled:opacity-50"
             >
-              Sign In
+              {isLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
 

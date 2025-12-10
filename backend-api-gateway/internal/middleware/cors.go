@@ -59,9 +59,12 @@ func CORSWithConfig(config CORSConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
-		// Check if origin is allowed
-		allowedOrigin := "*"
-		if len(config.AllowOrigins) > 0 && config.AllowOrigins[0] != "*" {
+		// When credentials are allowed, we must echo back the specific origin, not "*"
+		allowedOrigin := origin
+		if origin == "" {
+			allowedOrigin = "*"
+		} else if len(config.AllowOrigins) > 0 && config.AllowOrigins[0] != "*" {
+			allowedOrigin = ""
 			for _, o := range config.AllowOrigins {
 				if o == origin {
 					allowedOrigin = origin
@@ -70,18 +73,23 @@ func CORSWithConfig(config CORSConfig) gin.HandlerFunc {
 			}
 		}
 
+		if allowedOrigin == "" {
+			c.Next()
+			return
+		}
+
 		// Set CORS headers
 		c.Header("Access-Control-Allow-Origin", allowedOrigin)
 		c.Header("Access-Control-Allow-Methods", strings.Join(config.AllowMethods, ", "))
 		c.Header("Access-Control-Allow-Headers", strings.Join(config.AllowHeaders, ", "))
 		c.Header("Access-Control-Expose-Headers", strings.Join(config.ExposeHeaders, ", "))
 
-		if config.AllowCredentials {
+		if config.AllowCredentials && allowedOrigin != "*" {
 			c.Header("Access-Control-Allow-Credentials", "true")
 		}
 
 		if config.MaxAge > 0 {
-			c.Header("Access-Control-Max-Age", string(rune(config.MaxAge)))
+			c.Header("Access-Control-Max-Age", "86400")
 		}
 
 		// Handle preflight request

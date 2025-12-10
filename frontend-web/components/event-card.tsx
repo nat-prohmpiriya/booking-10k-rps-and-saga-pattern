@@ -4,7 +4,7 @@ import { Calendar, MapPin } from "lucide-react"
 import Link from "next/link"
 
 interface EventCardProps {
-  id: number
+  id: string | number
   title: string
   venue: string
   date: string

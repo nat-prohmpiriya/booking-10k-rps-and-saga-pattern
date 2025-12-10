@@ -8,8 +8,10 @@ import (
 type Role string
 
 const (
-	RoleUser  Role = "user"
-	RoleAdmin Role = "admin"
+	RoleCustomer   Role = "customer"
+	RoleOrganizer  Role = "organizer"
+	RoleAdmin      Role = "admin"
+	RoleSuperAdmin Role = "super_admin"
 )
 
 // User represents a user entity

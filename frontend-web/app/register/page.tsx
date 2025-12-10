@@ -3,17 +3,20 @@
 import type React from "react"
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Logo } from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SocialLoginButtons } from "@/components/social-login-buttons"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function RegisterPage() {
+  const router = useRouter()
+  const { register, isLoading, error: authError, clearError } = useAuth()
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    phone: "",
     password: "",
     confirmPassword: "",
   })
@@ -30,15 +33,13 @@ export default function RegisterPage() {
         if (!value) return "Email is required"
         if (!/\S+@\S+\.\S+/.test(value)) return "Email is invalid"
         return ""
-      case "phone":
-        if (!value) return "Phone is required"
-        if (!/^\+?[\d\s-()]+$/.test(value)) return "Phone number is invalid"
-        return ""
       case "password":
         if (!value) return "Password is required"
         if (value.length < 8) return "Password must be at least 8 characters"
-        if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(value))
-          return "Password must contain uppercase, lowercase, and number"
+        if (!/(?=.*[a-z])/.test(value)) return "Password must contain a lowercase letter"
+        if (!/(?=.*[A-Z])/.test(value)) return "Password must contain an uppercase letter"
+        if (!/(?=.*\d)/.test(value)) return "Password must contain a number"
+        if (!/(?=.*[!@#$%^&*(),.?":{}|<>])/.test(value)) return "Password must contain a special character"
         return ""
       case "confirmPassword":
         if (!value) return "Please confirm your password"
@@ -52,12 +53,12 @@ export default function RegisterPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
+    clearError()
 
     const error = validateField(name, value)
     setErrors((prev) => ({ ...prev, [name]: error }))
     setSuccess((prev) => ({ ...prev, [name]: !error && value.length > 0 }))
 
-    // Re-validate confirm password if password changes
     if (name === "password" && formData.confirmPassword) {
       const confirmError = validateField("confirmPassword", formData.confirmPassword)
       setErrors((prev) => ({ ...prev, confirmPassword: confirmError }))
@@ -65,7 +66,7 @@ export default function RegisterPage() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const newErrors: Record<string, string> = {}
     Object.keys(formData).forEach((key) => {
@@ -74,7 +75,16 @@ export default function RegisterPage() {
     })
 
     if (Object.keys(newErrors).length === 0) {
-      console.log("Registration successful", formData)
+      try {
+        await register({
+          email: formData.email,
+          password: formData.password,
+          name: formData.name,
+        })
+        router.push("/")
+      } catch {
+        // Error is handled in auth context
+      }
     } else {
       setErrors(newErrors)
     }
@@ -107,6 +117,11 @@ export default function RegisterPage() {
           <p className="text-muted-foreground text-center mb-8">Join us and start booking amazing events</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {authError && (
+              <div className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
+                {authError}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="name" className="text-foreground">
                 Full Name
@@ -144,24 +159,6 @@ export default function RegisterPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="phone" className="text-foreground">
-                Phone Number
-              </Label>
-              <Input
-                id="phone"
-                name="phone"
-                type="tel"
-                placeholder="+66 81 234 5678"
-                value={formData.phone}
-                onChange={handleChange}
-                className={`bg-secondary border-border focus:border-primary transition-all ${
-                  errors.phone ? "border-destructive focus:border-destructive" : ""
-                } ${success.phone ? "border-success focus:border-success" : ""}`}
-              />
-              {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
-            </div>
-
-            <div className="space-y-2">
               <Label htmlFor="password" className="text-foreground">
                 Password
               </Label>
@@ -177,6 +174,9 @@ export default function RegisterPage() {
                 } ${success.password ? "border-success focus:border-success" : ""}`}
               />
               {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+              <p className="text-xs text-muted-foreground">
+                Min 8 chars, uppercase, lowercase, number, special character
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -199,9 +199,10 @@ export default function RegisterPage() {
 
             <Button
               type="submit"
-              className="w-full bg-linear-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:via-primary/80 hover:to-primary/70 text-primary-foreground font-semibold shadow-lg shadow-primary/20 transition-all"
+              disabled={isLoading}
+              className="w-full bg-linear-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:via-primary/80 hover:to-primary/70 text-primary-foreground font-semibold shadow-lg shadow-primary/20 transition-all disabled:opacity-50"
             >
-              Create Account
+              {isLoading ? "Creating Account..." : "Create Account"}
             </Button>
           </form>
 

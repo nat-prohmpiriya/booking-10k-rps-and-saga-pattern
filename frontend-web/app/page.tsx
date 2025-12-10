@@ -1,9 +1,35 @@
+"use client"
+
 import { Header } from "@/components/header"
 import { Hero } from "@/components/hero"
 import { EventCard } from "@/components/event-card"
-import { EVENTS_DATA } from "@/lib/events-data"
+import { useEvents } from "@/hooks/use-events"
+import { Skeleton } from "@/components/ui/skeleton"
+
+function EventCardSkeleton() {
+  return (
+    <div className="rounded-lg border border-border/50 overflow-hidden">
+      <Skeleton className="h-48 lg:h-56 w-full" />
+      <div className="p-5 space-y-4">
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+        <div className="flex items-center justify-between pt-2 border-t border-border/50">
+          <div className="space-y-1">
+            <Skeleton className="h-3 w-12" />
+            <Skeleton className="h-8 w-20" />
+          </div>
+          <Skeleton className="h-10 w-24" />
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function Home() {
+  const { events, isLoading } = useEvents()
+
   return (
     <main className="min-h-screen">
       <Header />
@@ -23,17 +49,28 @@ export default function Home() {
 
         {/* Event Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
-          {EVENTS_DATA.map((event) => (
-            <EventCard
-              key={event.id}
-              id={event.id}
-              title={event.title}
-              venue={event.venue}
-              date={event.date}
-              price={Math.min(...event.ticketZones.map((z) => z.price))}
-              image={event.image}
-            />
-          ))}
+          {isLoading ? (
+            <>
+              <EventCardSkeleton />
+              <EventCardSkeleton />
+              <EventCardSkeleton />
+              <EventCardSkeleton />
+              <EventCardSkeleton />
+              <EventCardSkeleton />
+            </>
+          ) : (
+            events.map((event) => (
+              <EventCard
+                key={event.id}
+                id={event.id}
+                title={event.title}
+                venue={event.venue}
+                date={event.date}
+                price={event.price}
+                image={event.image}
+              />
+            ))
+          )}
         </div>
       </section>
 

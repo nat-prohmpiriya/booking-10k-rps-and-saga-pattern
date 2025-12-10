@@ -94,25 +94,90 @@ dev-restart: dev-down dev
 # Run Services Locally
 # ================================
 
+# Load .env file if exists
+ifneq (,$(wildcard ./.env))
+    include .env
+    export
+endif
+
 run-gateway:
 	@echo "$(GREEN)Starting API Gateway...$(NC)"
-	cd backend-api-gateway && go run main.go
+	SERVER_PORT=8080 && cd backend-api-gateway && go run main.go
 
 run-auth:
 	@echo "$(GREEN)Starting Auth Service...$(NC)"
-	cd backend-auth-service && go run main.go
+	SERVER_PORT=8081 && cd backend-auth && go run main.go
 
 run-booking:
 	@echo "$(GREEN)Starting Booking Service...$(NC)"
-	cd backend-booking-service && go run main.go
+	SERVER_PORT=8083 && cd backend-booking && go run main.go
 
 run-ticket:
 	@echo "$(GREEN)Starting Ticket Service...$(NC)"
-	cd backend-ticket-service && go run main.go
+	SERVER_PORT=8082 && cd backend-ticket && go run main.go
 
 run-payment:
 	@echo "$(GREEN)Starting Payment Service...$(NC)"
-	cd backend-payment-service && go run main.go
+	SERVER_PORT=8084 && cd backend-payment && go run main.go
+
+# Stop all backend services
+stop-all:
+	@echo "$(YELLOW)Stopping all backend services...$(NC)"
+	@-pkill -f "backend-api-gateway" 2>/dev/null || true
+	@-pkill -f "backend-auth" 2>/dev/null || true
+	@-pkill -f "backend-ticket" 2>/dev/null || true
+	@-pkill -f "backend-booking" 2>/dev/null || true
+	@-pkill -f "backend-payment" 2>/dev/null || true
+	@echo "$(GREEN)All services stopped$(NC)"
+
+# Show running services
+ps:
+	@echo "$(GREEN)Running backend services:$(NC)"
+	@lsof -i :8080 -i :8081 -i :8082 -i :8083 -i :8084 2>/dev/null | grep LISTEN || echo "No services running"
+
+# ================================
+# Docker Development (with hot reload)
+# ================================
+
+docker-dev:
+	@echo "$(GREEN)Starting all services (dev mode + hot reload)...$(NC)"
+	docker-compose -f docker-compose.services.yml up --build
+
+docker-dev-d:
+	@echo "$(GREEN)Starting all services in background (dev mode)...$(NC)"
+	docker-compose -f docker-compose.services.yml up --build -d
+
+docker-dev-down:
+	@echo "$(YELLOW)Stopping dev services...$(NC)"
+	docker-compose -f docker-compose.services.yml down
+
+docker-dev-logs:
+	docker-compose -f docker-compose.services.yml logs -f
+
+# ================================
+# Docker Production
+# ================================
+
+docker-prod:
+	@echo "$(GREEN)Starting all services (production mode)...$(NC)"
+	docker-compose up --build -d
+
+docker-prod-down:
+	@echo "$(YELLOW)Stopping production services...$(NC)"
+	docker-compose down
+
+docker-prod-logs:
+	docker-compose logs -f
+
+# ================================
+# Docker Shortcuts
+# ================================
+
+docker-up: docker-dev
+docker-down: docker-dev-down
+docker-logs: docker-dev-logs
+docker-ps:
+	@docker-compose -f docker-compose.services.yml ps
 
 # ================================
 # Build
