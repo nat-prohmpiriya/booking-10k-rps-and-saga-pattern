@@ -46,6 +46,15 @@ type QueueRepository interface {
 
 	// DeleteQueuePass deletes the queue pass after successful booking
 	DeleteQueuePass(ctx context.Context, eventID, userID string) error
+
+	// PopUsersFromQueue pops the first N users from the queue (for batch release)
+	PopUsersFromQueue(ctx context.Context, eventID string, count int64) ([]string, error)
+
+	// GetAllQueueEventIDs returns all event IDs that have active queues
+	GetAllQueueEventIDs(ctx context.Context) ([]string, error)
+
+	// RemoveUserFromQueue removes a user from the queue without token verification (for worker use)
+	RemoveUserFromQueue(ctx context.Context, eventID, userID string) error
 }
 
 // JoinQueueParams contains parameters for joining a queue

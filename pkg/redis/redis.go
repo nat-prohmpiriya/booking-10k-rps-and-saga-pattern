@@ -381,3 +381,15 @@ func (c *Client) ZRangeByScore(ctx context.Context, key string, opt *redis.ZRang
 func (c *Client) ZCount(ctx context.Context, key, min, max string) *redis.IntCmd {
 	return c.client.ZCount(ctx, key, min, max)
 }
+
+// --- Key Scanning Operations ---
+
+// Scan iterates over keys matching a pattern
+func (c *Client) Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanCmd {
+	return c.client.Scan(ctx, cursor, match, count)
+}
+
+// Keys returns all keys matching a pattern (use with caution in production)
+func (c *Client) Keys(ctx context.Context, pattern string) *redis.StringSliceCmd {
+	return c.client.Keys(ctx, pattern)
+}

@@ -235,5 +235,95 @@ func (r *RedisQueueRepository) DeleteQueuePass(ctx context.Context, eventID, use
 	return nil
 }
 
+// PopUsersFromQueue pops the first N users from the queue (lowest scores = earliest joined)
+func (r *RedisQueueRepository) PopUsersFromQueue(ctx context.Context, eventID string, count int64) ([]string, error) {
+	queueKey := fmt.Sprintf("queue:%s", eventID)
+
+	// Get users with lowest scores (earliest joined)
+	result, err := r.client.ZRange(ctx, queueKey, 0, count-1).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users from queue: %w", err)
+	}
+
+	if len(result) == 0 {
+		return []string{}, nil
+	}
+
+	// Remove the users from the sorted set
+	if _, err := r.client.ZRem(ctx, queueKey, stringSliceToInterface(result)...).Result(); err != nil {
+		return nil, fmt.Errorf("failed to remove users from queue: %w", err)
+	}
+
+	// Clean up user queue info for each user
+	for _, userID := range result {
+		userQueueKey := fmt.Sprintf("queue:user:%s:%s", eventID, userID)
+		r.client.Del(ctx, userQueueKey)
+	}
+
+	return result, nil
+}
+
+// GetAllQueueEventIDs returns all event IDs that have active queues
+func (r *RedisQueueRepository) GetAllQueueEventIDs(ctx context.Context) ([]string, error) {
+	// Scan for all queue keys matching pattern "queue:*"
+	// But exclude user-specific keys "queue:user:*" and "queue:pass:*"
+	var eventIDs []string
+	var cursor uint64
+
+	for {
+		keys, nextCursor, err := r.client.Scan(ctx, cursor, "queue:*", 100).Result()
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan queue keys: %w", err)
+		}
+
+		for _, key := range keys {
+			// Skip user-specific keys
+			if len(key) > 11 && key[6:10] == "user" {
+				continue
+			}
+			if len(key) > 11 && key[6:10] == "pass" {
+				continue
+			}
+			// Extract event ID from "queue:{eventID}"
+			if len(key) > 6 {
+				eventID := key[6:] // Remove "queue:" prefix
+				eventIDs = append(eventIDs, eventID)
+			}
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return eventIDs, nil
+}
+
+// RemoveUserFromQueue removes a user from the queue without token verification
+func (r *RedisQueueRepository) RemoveUserFromQueue(ctx context.Context, eventID, userID string) error {
+	queueKey := fmt.Sprintf("queue:%s", eventID)
+	userQueueKey := fmt.Sprintf("queue:user:%s:%s", eventID, userID)
+
+	// Remove from sorted set
+	if _, err := r.client.ZRem(ctx, queueKey, userID).Result(); err != nil {
+		return fmt.Errorf("failed to remove from queue: %w", err)
+	}
+
+	// Remove user queue info
+	r.client.Del(ctx, userQueueKey)
+
+	return nil
+}
+
+// Helper function to convert []string to []interface{} for ZRem
+func stringSliceToInterface(s []string) []interface{} {
+	result := make([]interface{}, len(s))
+	for i, v := range s {
+		result[i] = v
+	}
+	return result
+}
+
 // Ensure RedisQueueRepository implements QueueRepository
 var _ QueueRepository = (*RedisQueueRepository)(nil)
