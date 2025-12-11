@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"time"
 
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-booking/internal/domain"
 	pkgredis "github.com/prohmpiriya/booking-rush-10k-rps/pkg/redis"
@@ -196,6 +197,42 @@ func toFloat64(v interface{}) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// StoreQueuePass stores the queue pass token in Redis with TTL
+func (r *RedisQueueRepository) StoreQueuePass(ctx context.Context, eventID, userID, queuePass string, ttl int) error {
+	key := fmt.Sprintf("queue:pass:%s:%s", eventID, userID)
+	ttlDuration := time.Duration(ttl) * time.Second
+	err := r.client.Set(ctx, key, queuePass, ttlDuration).Err()
+	if err != nil {
+		return fmt.Errorf("failed to store queue pass: %w", err)
+	}
+
+	return nil
+}
+
+// ValidateQueuePass validates if the queue pass is valid and not expired
+func (r *RedisQueueRepository) ValidateQueuePass(ctx context.Context, eventID, userID, queuePass string) (bool, error) {
+	key := fmt.Sprintf("queue:pass:%s:%s", eventID, userID)
+	storedPass, err := r.client.Get(ctx, key).Result()
+	if err != nil {
+		if err.Error() == "redis: nil" {
+			return false, nil // No queue pass found or expired
+		}
+		return false, fmt.Errorf("failed to get queue pass: %w", err)
+	}
+
+	return storedPass == queuePass, nil
+}
+
+// DeleteQueuePass deletes the queue pass after successful booking
+func (r *RedisQueueRepository) DeleteQueuePass(ctx context.Context, eventID, userID string) error {
+	key := fmt.Sprintf("queue:pass:%s:%s", eventID, userID)
+	err := r.client.Del(ctx, key).Err()
+	if err != nil {
+		return fmt.Errorf("failed to delete queue pass: %w", err)
+	}
+	return nil
 }
 
 // Ensure RedisQueueRepository implements QueueRepository

@@ -1035,33 +1035,33 @@
 
 **Goal:** Implement virtual queue and audit logging
 
-### [ ]  P6-01: Virtual Queue - Join Queue
+### [x]  P6-01: Virtual Queue - Join Queue
 | Field | Value |
 |-------|-------|
 | **Description** | Implement queue join endpoint |
 | **Technical Context** | `backend-booking-service/internal/handler/queue_handler.go` |
 | **Acceptance Criteria** | - `POST /queue/join` adds user to queue<br>- Uses Redis Sorted Set (score = timestamp)<br>- Returns queue position |
 
-- [ ] Create QueueHandler
-- [ ] Implement join queue logic
-- [ ] Store in Redis Sorted Set
-- [ ] Return position and estimated wait
-- [ ] Write tests
+- [x] Create QueueHandler
+- [x] Implement join queue logic
+- [x] Store in Redis Sorted Set
+- [x] Return position and estimated wait
+- [x] Write tests
 
 ---
 
-### [ ]  P6-02: Virtual Queue - Queue Status
+### [x]  P6-02: Virtual Queue - Queue Status
 | Field | Value |
 |-------|-------|
 | **Description** | Implement queue status endpoint |
 | **Technical Context** | `backend-booking-service/internal/handler/queue_handler.go` |
 | **Acceptance Criteria** | - `GET /queue/status` returns current position<br>- Returns estimated wait time<br>- Returns `ready` status when position = 0 |
 
-- [ ] Implement status endpoint
-- [ ] Calculate current position
-- [ ] Calculate estimated wait time
-- [ ] Indicate when ready to proceed
-- [ ] Write tests
+- [x] Implement status endpoint
+- [x] Calculate current position
+- [x] Calculate estimated wait time
+- [x] Indicate when ready to proceed
+- [x] Write tests
 
 ---
 

@@ -51,6 +51,21 @@ func (m *MockQueueRepository) GetUserQueueInfo(ctx context.Context, eventID, use
 	return args.Get(0).(map[string]string), args.Error(1)
 }
 
+func (m *MockQueueRepository) StoreQueuePass(ctx context.Context, eventID, userID, queuePass string, ttl int) error {
+	args := m.Called(ctx, eventID, userID, queuePass, ttl)
+	return args.Error(0)
+}
+
+func (m *MockQueueRepository) ValidateQueuePass(ctx context.Context, eventID, userID, queuePass string) (bool, error) {
+	args := m.Called(ctx, eventID, userID, queuePass)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockQueueRepository) DeleteQueuePass(ctx context.Context, eventID, userID string) error {
+	args := m.Called(ctx, eventID, userID)
+	return args.Error(0)
+}
+
 func TestQueueService_JoinQueue_Success(t *testing.T) {
 	mockRepo := new(MockQueueRepository)
 	service := NewQueueService(mockRepo, &QueueServiceConfig{
@@ -216,6 +231,8 @@ func TestQueueService_GetPosition_IsReady(t *testing.T) {
 	mockRepo := new(MockQueueRepository)
 	service := NewQueueService(mockRepo, &QueueServiceConfig{
 		EstimatedWaitPerUser: 3,
+		QueuePassTTL:         5 * time.Minute,
+		JWTSecret:            "test-secret",
 	})
 
 	// Position 1 means user is ready
@@ -229,12 +246,15 @@ func TestQueueService_GetPosition_IsReady(t *testing.T) {
 
 	mockRepo.On("GetPosition", mock.Anything, "event-123", "user-123").Return(expectedResult, nil)
 	mockRepo.On("GetUserQueueInfo", mock.Anything, "event-123", "user-123").Return(userInfo, nil)
+	mockRepo.On("StoreQueuePass", mock.Anything, "event-123", "user-123", mock.AnythingOfType("string"), 300).Return(nil)
 
 	result, err := service.GetPosition(context.Background(), "user-123", "event-123")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.True(t, result.IsReady)
+	assert.NotEmpty(t, result.QueuePass)
+	assert.False(t, result.QueuePassExpiresAt.IsZero())
 
 	mockRepo.AssertExpectations(t)
 }
@@ -349,6 +369,137 @@ func TestQueueService_EstimatedWait_Calculation(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, int64(50), result.EstimatedWait) // 10 * 5
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestQueueService_GetPosition_QueuePassGeneration(t *testing.T) {
+	mockRepo := new(MockQueueRepository)
+	service := NewQueueService(mockRepo, &QueueServiceConfig{
+		EstimatedWaitPerUser: 3,
+		QueuePassTTL:         5 * time.Minute,
+		JWTSecret:            "test-secret-key",
+	})
+
+	// Position 1 means user is ready and should receive a queue pass
+	expectedResult := &repository.QueuePositionResult{
+		Position:     1,
+		TotalInQueue: 50,
+		IsInQueue:    true,
+	}
+
+	userInfo := map[string]string{
+		"expires_at": "1700000000",
+	}
+
+	mockRepo.On("GetPosition", mock.Anything, "event-456", "user-789").Return(expectedResult, nil)
+	mockRepo.On("GetUserQueueInfo", mock.Anything, "event-456", "user-789").Return(userInfo, nil)
+	mockRepo.On("StoreQueuePass", mock.Anything, "event-456", "user-789", mock.AnythingOfType("string"), 300).Return(nil)
+
+	result, err := service.GetPosition(context.Background(), "user-789", "event-456")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.True(t, result.IsReady)
+	assert.NotEmpty(t, result.QueuePass)
+	assert.False(t, result.QueuePassExpiresAt.IsZero())
+	// Verify queue pass expires in approximately 5 minutes from now
+	assert.True(t, result.QueuePassExpiresAt.After(time.Now()))
+	assert.True(t, result.QueuePassExpiresAt.Before(time.Now().Add(6*time.Minute)))
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestQueueService_GetPosition_NoQueuePassWhenNotReady(t *testing.T) {
+	mockRepo := new(MockQueueRepository)
+	service := NewQueueService(mockRepo, &QueueServiceConfig{
+		EstimatedWaitPerUser: 3,
+		QueuePassTTL:         5 * time.Minute,
+		JWTSecret:            "test-secret-key",
+	})
+
+	// Position 5 means user is not ready yet
+	expectedResult := &repository.QueuePositionResult{
+		Position:     5,
+		TotalInQueue: 100,
+		IsInQueue:    true,
+	}
+
+	userInfo := map[string]string{}
+
+	mockRepo.On("GetPosition", mock.Anything, "event-123", "user-123").Return(expectedResult, nil)
+	mockRepo.On("GetUserQueueInfo", mock.Anything, "event-123", "user-123").Return(userInfo, nil)
+
+	result, err := service.GetPosition(context.Background(), "user-123", "event-123")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.False(t, result.IsReady)
+	assert.Empty(t, result.QueuePass)
+	assert.True(t, result.QueuePassExpiresAt.IsZero())
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestQueueService_GetPosition_QueuePassStoreFails(t *testing.T) {
+	mockRepo := new(MockQueueRepository)
+	service := NewQueueService(mockRepo, &QueueServiceConfig{
+		EstimatedWaitPerUser: 3,
+		QueuePassTTL:         5 * time.Minute,
+		JWTSecret:            "test-secret-key",
+	})
+
+	expectedResult := &repository.QueuePositionResult{
+		Position:     1,
+		TotalInQueue: 50,
+		IsInQueue:    true,
+	}
+
+	userInfo := map[string]string{}
+
+	mockRepo.On("GetPosition", mock.Anything, "event-123", "user-123").Return(expectedResult, nil)
+	mockRepo.On("GetUserQueueInfo", mock.Anything, "event-123", "user-123").Return(userInfo, nil)
+	// Simulate Redis store failure
+	mockRepo.On("StoreQueuePass", mock.Anything, "event-123", "user-123", mock.AnythingOfType("string"), 300).Return(assert.AnError)
+
+	result, err := service.GetPosition(context.Background(), "user-123", "event-123")
+
+	// Should still return successfully, just without the queue pass
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.True(t, result.IsReady)
+	assert.Empty(t, result.QueuePass) // Empty because store failed
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestQueueService_QueuePassJWTFormat(t *testing.T) {
+	mockRepo := new(MockQueueRepository)
+	service := NewQueueService(mockRepo, &QueueServiceConfig{
+		EstimatedWaitPerUser: 3,
+		QueuePassTTL:         5 * time.Minute,
+		JWTSecret:            "test-secret-key",
+	})
+
+	expectedResult := &repository.QueuePositionResult{
+		Position:     1,
+		TotalInQueue: 50,
+		IsInQueue:    true,
+	}
+
+	userInfo := map[string]string{}
+
+	mockRepo.On("GetPosition", mock.Anything, "event-123", "user-123").Return(expectedResult, nil)
+	mockRepo.On("GetUserQueueInfo", mock.Anything, "event-123", "user-123").Return(userInfo, nil)
+	mockRepo.On("StoreQueuePass", mock.Anything, "event-123", "user-123", mock.AnythingOfType("string"), 300).Return(nil)
+
+	result, err := service.GetPosition(context.Background(), "user-123", "event-123")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	// JWT should have 3 parts separated by dots
+	parts := len(result.QueuePass)
+	assert.Greater(t, parts, 50) // JWT tokens are typically longer than 50 chars
 
 	mockRepo.AssertExpectations(t)
 }

@@ -24,6 +24,11 @@ type QueuePositionResponse struct {
 	EstimatedWait int64     `json:"estimated_wait_seconds"`
 	IsReady       bool      `json:"is_ready"`
 	ExpiresAt     time.Time `json:"expires_at,omitempty"`
+	// QueuePass is a JWT token generated when user is ready (position = 1)
+	// This token is required to proceed with booking
+	QueuePass     string    `json:"queue_pass,omitempty"`
+	// QueuePassExpiresAt indicates when the queue pass expires (5 minutes validity)
+	QueuePassExpiresAt time.Time `json:"queue_pass_expires_at,omitempty"`
 }
 
 // QueueStatusResponse represents queue status for an event

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-booking/internal/domain"
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-booking/internal/dto"
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-booking/internal/repository"
@@ -34,6 +35,8 @@ type queueService struct {
 	queueTTL             time.Duration
 	maxQueueSize         int64
 	estimatedWaitPerUser int64 // seconds per user in queue
+	queuePassTTL         time.Duration
+	jwtSecret            string
 }
 
 // QueueServiceConfig contains configuration for queue service
@@ -41,6 +44,8 @@ type QueueServiceConfig struct {
 	QueueTTL             time.Duration
 	MaxQueueSize         int64
 	EstimatedWaitPerUser int64
+	QueuePassTTL         time.Duration // TTL for queue pass token (default: 5 minutes)
+	JWTSecret            string        // Secret for signing queue pass JWT
 }
 
 // NewQueueService creates a new queue service
@@ -49,8 +54,10 @@ func NewQueueService(
 	cfg *QueueServiceConfig,
 ) QueueService {
 	ttl := 30 * time.Minute
-	maxSize := int64(0) // 0 = unlimited
+	maxSize := int64(0)       // 0 = unlimited
 	estimatedWait := int64(3) // 3 seconds per user
+	queuePassTTL := 5 * time.Minute
+	jwtSecret := "queue-pass-secret-key" // Default secret
 
 	if cfg != nil {
 		if cfg.QueueTTL > 0 {
@@ -62,6 +69,12 @@ func NewQueueService(
 		if cfg.EstimatedWaitPerUser > 0 {
 			estimatedWait = cfg.EstimatedWaitPerUser
 		}
+		if cfg.QueuePassTTL > 0 {
+			queuePassTTL = cfg.QueuePassTTL
+		}
+		if cfg.JWTSecret != "" {
+			jwtSecret = cfg.JWTSecret
+		}
 	}
 
 	return &queueService{
@@ -69,6 +82,8 @@ func NewQueueService(
 		queueTTL:             ttl,
 		maxQueueSize:         maxSize,
 		estimatedWaitPerUser: estimatedWait,
+		queuePassTTL:         queuePassTTL,
+		jwtSecret:            jwtSecret,
 	}
 }
 
@@ -161,13 +176,35 @@ func (s *queueService) GetPosition(ctx context.Context, userID, eventID string) 
 		}
 	}
 
-	return &dto.QueuePositionResponse{
+	response := &dto.QueuePositionResponse{
 		Position:      result.Position,
 		TotalInQueue:  result.TotalInQueue,
 		EstimatedWait: estimatedWait,
 		IsReady:       isReady,
 		ExpiresAt:     expiresAt,
-	}, nil
+	}
+
+	// Generate queue pass when user is ready (position = 1)
+	if isReady {
+		queuePass, queuePassExpiresAt, err := s.generateQueuePass(userID, eventID)
+		if err != nil {
+			// Log error but don't fail the request
+			// The user can still see their position
+			return response, nil
+		}
+
+		// Store queue pass in Redis for validation
+		ttlSeconds := int(s.queuePassTTL.Seconds())
+		if err := s.queueRepo.StoreQueuePass(ctx, eventID, userID, queuePass, ttlSeconds); err != nil {
+			// Log error but don't fail the request
+			return response, nil
+		}
+
+		response.QueuePass = queuePass
+		response.QueuePassExpiresAt = queuePassExpiresAt
+	}
+
+	return response, nil
 }
 
 // LeaveQueue removes a user from the queue
@@ -238,4 +275,40 @@ func parseTimestamp(s string) (int64, error) {
 		return i, nil
 	}
 	return 0, fmt.Errorf("cannot parse timestamp: %s", s)
+}
+
+// QueuePassClaims represents the claims for a queue pass JWT
+type QueuePassClaims struct {
+	UserID  string `json:"user_id"`
+	EventID string `json:"event_id"`
+	Purpose string `json:"purpose"`
+	jwt.RegisteredClaims
+}
+
+// generateQueuePass generates a signed JWT queue pass token
+func (s *queueService) generateQueuePass(userID, eventID string) (string, time.Time, error) {
+	now := time.Now()
+	expiresAt := now.Add(s.queuePassTTL)
+
+	claims := QueuePassClaims{
+		UserID:  userID,
+		EventID: eventID,
+		Purpose: "queue_pass",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+			Issuer:    "booking-service",
+			Subject:   userID,
+			ID:        generateQueueToken(), // Unique JWT ID
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString([]byte(s.jwtSecret))
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("failed to sign queue pass: %w", err)
+	}
+
+	return signedToken, expiresAt, nil
 }

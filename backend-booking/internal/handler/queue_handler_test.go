@@ -363,3 +363,72 @@ func TestQueueHandler_QueueFull(t *testing.T) {
 
 	mockService.AssertExpectations(t)
 }
+
+func TestQueueHandler_GetPosition_WithQueuePass(t *testing.T) {
+	mockService := new(MockQueueService)
+	handler := NewQueueHandler(mockService)
+	router := setupQueueTestRouter(handler)
+
+	now := time.Now()
+	expectedResponse := &dto.QueuePositionResponse{
+		Position:           1,
+		TotalInQueue:       100,
+		EstimatedWait:      0,
+		IsReady:            true,
+		QueuePass:          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.signature",
+		QueuePassExpiresAt: now.Add(5 * time.Minute),
+	}
+
+	mockService.On("GetPosition", mock.Anything, "user-123", "event-123").Return(expectedResponse, nil)
+
+	req, _ := http.NewRequest("GET", "/api/v1/queue/position/event-123", nil)
+	req.Header.Set("X-User-ID", "user-123")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response dto.QueuePositionResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), response.Position)
+	assert.True(t, response.IsReady)
+	assert.NotEmpty(t, response.QueuePass)
+	assert.False(t, response.QueuePassExpiresAt.IsZero())
+
+	mockService.AssertExpectations(t)
+}
+
+func TestQueueHandler_GetPosition_NoQueuePassWhenNotReady(t *testing.T) {
+	mockService := new(MockQueueService)
+	handler := NewQueueHandler(mockService)
+	router := setupQueueTestRouter(handler)
+
+	expectedResponse := &dto.QueuePositionResponse{
+		Position:      10,
+		TotalInQueue:  100,
+		EstimatedWait: 30,
+		IsReady:       false,
+		QueuePass:     "", // Empty when not ready
+	}
+
+	mockService.On("GetPosition", mock.Anything, "user-123", "event-123").Return(expectedResponse, nil)
+
+	req, _ := http.NewRequest("GET", "/api/v1/queue/position/event-123", nil)
+	req.Header.Set("X-User-ID", "user-123")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response dto.QueuePositionResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(10), response.Position)
+	assert.False(t, response.IsReady)
+	assert.Empty(t, response.QueuePass)
+
+	mockService.AssertExpectations(t)
+}

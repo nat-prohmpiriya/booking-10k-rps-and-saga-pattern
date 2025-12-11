@@ -37,6 +37,15 @@ type QueueRepository interface {
 
 	// GetUserQueueInfo gets the user's queue info (token, joined_at, etc.)
 	GetUserQueueInfo(ctx context.Context, eventID, userID string) (map[string]string, error)
+
+	// StoreQueuePass stores the queue pass token in Redis with TTL
+	StoreQueuePass(ctx context.Context, eventID, userID, queuePass string, ttl int) error
+
+	// ValidateQueuePass validates if the queue pass is valid and not expired
+	ValidateQueuePass(ctx context.Context, eventID, userID, queuePass string) (bool, error)
+
+	// DeleteQueuePass deletes the queue pass after successful booking
+	DeleteQueuePass(ctx context.Context, eventID, userID string) error
 }
 
 // JoinQueueParams contains parameters for joining a queue
