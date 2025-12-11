@@ -1,0 +1,1569 @@
+{
+  "info": {
+    "_postman_id": "booking-rush-10k-rps",
+    "name": "Booking Rush 10K RPS",
+    "description": "High-Concurrency Ticket Booking System API Collection\n\nDesigned for 10,000 RPS with zero overselling.\n\n## Services\n- **Auth Service** (8081): User authentication, JWT, tenants\n- **Ticket Service** (8082): Events, shows, zones catalog\n- **Booking Service** (8083): Seat reservation with Redis Lua\n- **Payment Service** (8084): Payment processing\n\n## Authentication\nMost endpoints require JWT token in `Authorization: Bearer <token>` header.\n\nUse the Login endpoint to get tokens, then set `{{access_token}}` variable.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost",
+      "type": "string"
+    },
+    {
+      "key": "gateway_url",
+      "value": "{{base_url}}:8080",
+      "type": "string"
+    },
+    {
+      "key": "auth_url",
+      "value": "{{base_url}}:8081",
+      "type": "string"
+    },
+    {
+      "key": "ticket_url",
+      "value": "{{base_url}}:8082",
+      "type": "string"
+    },
+    {
+      "key": "booking_url",
+      "value": "{{base_url}}:8083",
+      "type": "string"
+    },
+    {
+      "key": "payment_url",
+      "value": "{{base_url}}:8084",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenant_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "event_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "show_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "zone_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "booking_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payment_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Checks",
+      "item": [
+        {
+          "name": "API Gateway - Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway_url}}/health",
+              "host": ["{{gateway_url}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Auth Service - Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{auth_url}}/health",
+              "host": ["{{auth_url}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Ticket Service - Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ticket_url}}/health",
+              "host": ["{{ticket_url}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Booking Service - Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{booking_url}}/health",
+              "host": ["{{booking_url}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Payment Service - Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{payment_url}}/health",
+              "host": ["{{payment_url}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "API Gateway - Ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway_url}}/ready",
+              "host": ["{{gateway_url}}"],
+              "path": ["ready"]
+            }
+          }
+        },
+        {
+          "name": "Auth Service - Ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{auth_url}}/ready",
+              "host": ["{{auth_url}}"],
+              "path": ["ready"]
+            }
+          }
+        },
+        {
+          "name": "Ticket Service - Ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ticket_url}}/ready",
+              "host": ["{{ticket_url}}"],
+              "path": ["ready"]
+            }
+          }
+        },
+        {
+          "name": "Booking Service - Ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{booking_url}}/ready",
+              "host": ["{{booking_url}}"],
+              "path": ["ready"]
+            }
+          }
+        },
+        {
+          "name": "Payment Service - Ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{payment_url}}/ready",
+              "host": ["{{payment_url}}"],
+              "path": ["ready"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth Service",
+      "item": [
+        {
+          "name": "Authentication",
+          "item": [
+            {
+              "name": "Register",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    const response = pm.response.json();",
+                      "    if (response.data && response.data.user) {",
+                      "        pm.collectionVariables.set('user_id', response.data.user.id);",
+                      "    }",
+                      "    if (response.data && response.data.access_token) {",
+                      "        pm.collectionVariables.set('access_token', response.data.access_token);",
+                      "        pm.collectionVariables.set('refresh_token', response.data.refresh_token);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"Password123!\",\n  \"name\": \"Test User\"\n}"
+                },
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/auth/register",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "auth", "register"]
+                },
+                "description": "Register a new user account.\n\n**Request Body:**\n- `email` (required): User email address\n- `password` (required): Password (min 8 chars, must include uppercase, lowercase, number, special char)\n- `name` (optional): User display name"
+              }
+            },
+            {
+              "name": "Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    const response = pm.response.json();",
+                      "    if (response.data) {",
+                      "        pm.collectionVariables.set('access_token', response.data.access_token);",
+                      "        pm.collectionVariables.set('refresh_token', response.data.refresh_token);",
+                      "        if (response.data.user) {",
+                      "            pm.collectionVariables.set('user_id', response.data.user.id);",
+                      "        }",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"Password123!\"\n}"
+                },
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/auth/login",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "auth", "login"]
+                },
+                "description": "Login with email and password.\n\nReturns access_token (short-lived) and refresh_token (long-lived).\n\nThe test script automatically saves tokens to collection variables."
+              }
+            },
+            {
+              "name": "Refresh Token",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    const response = pm.response.json();",
+                      "    if (response.data) {",
+                      "        pm.collectionVariables.set('access_token', response.data.access_token);",
+                      "        pm.collectionVariables.set('refresh_token', response.data.refresh_token);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/auth/refresh",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "auth", "refresh"]
+                },
+                "description": "Refresh the access token using a valid refresh token.\n\nUse this when the access token expires."
+              }
+            },
+            {
+              "name": "Get Current User (Me)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/auth/me",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "auth", "me"]
+                },
+                "description": "Get the currently authenticated user's profile information.\n\nRequires valid JWT token."
+              }
+            },
+            {
+              "name": "Logout",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/auth/logout",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "auth", "logout"]
+                },
+                "description": "Logout and invalidate the refresh token."
+              }
+            },
+            {
+              "name": "Logout All Sessions",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/auth/logout-all",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "auth", "logout-all"]
+                },
+                "description": "Logout from all sessions (invalidate all refresh tokens for this user).\n\nRequires valid JWT token."
+              }
+            },
+            {
+              "name": "Validate Token (Internal)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"token\": \"{{access_token}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/auth/validate",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "auth", "validate"]
+                },
+                "description": "Internal endpoint for other services to validate JWT tokens.\n\nUsed by API Gateway and other microservices."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tenants",
+          "item": [
+            {
+              "name": "Create Tenant",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    const response = pm.response.json();",
+                      "    if (response.data && response.data.id) {",
+                      "        pm.collectionVariables.set('tenant_id', response.data.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"My Company\",\n  \"slug\": \"my-company\",\n  \"settings\": {\n    \"theme\": \"default\",\n    \"timezone\": \"Asia/Bangkok\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/tenants",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "tenants"]
+                },
+                "description": "Create a new tenant (multi-tenant support).\n\n**Requires Admin role.**\n\n**Request Body:**\n- `name` (required): Tenant display name\n- `slug` (required): Unique URL-friendly identifier\n- `settings` (optional): Tenant-specific settings"
+              }
+            },
+            {
+              "name": "List Tenants",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/tenants?limit=10&offset=0",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "tenants"],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    },
+                    {
+                      "key": "offset",
+                      "value": "0"
+                    }
+                  ]
+                },
+                "description": "List all tenants with pagination.\n\n**Requires Admin role.**\n\n**Query Parameters:**\n- `limit`: Number of items per page (default: 10)\n- `offset`: Number of items to skip"
+              }
+            },
+            {
+              "name": "Get Tenant by ID",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/tenants/{{tenant_id}}",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "tenants", "{{tenant_id}}"]
+                },
+                "description": "Get tenant details by ID.\n\n**Requires Admin role.**"
+              }
+            },
+            {
+              "name": "Get Tenant by Slug",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/tenants/slug/my-company",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "tenants", "slug", "my-company"]
+                },
+                "description": "Get tenant details by slug.\n\n**Requires Admin role.**"
+              }
+            },
+            {
+              "name": "Update Tenant",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Company Name\",\n  \"settings\": {\n    \"theme\": \"dark\",\n    \"timezone\": \"Asia/Bangkok\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/tenants/{{tenant_id}}",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "tenants", "{{tenant_id}}"]
+                },
+                "description": "Update tenant details.\n\n**Requires Admin role.**"
+              }
+            },
+            {
+              "name": "Delete Tenant",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/tenants/{{tenant_id}}",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "tenants", "{{tenant_id}}"]
+                },
+                "description": "Soft delete a tenant.\n\n**Requires Admin role.**"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ticket Service",
+      "item": [
+        {
+          "name": "Events",
+          "item": [
+            {
+              "name": "List Events (Public)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/events?limit=10&offset=0",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "events"],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    },
+                    {
+                      "key": "offset",
+                      "value": "0"
+                    }
+                  ]
+                },
+                "description": "List all published events.\n\n**Public endpoint - no authentication required.**\n\n**Query Parameters:**\n- `limit`: Number of items per page (default: 10)\n- `offset`: Number of items to skip"
+              }
+            },
+            {
+              "name": "Get Event by Slug (Public)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/events/concert-2024",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "events", "concert-2024"]
+                },
+                "description": "Get event details by URL slug.\n\n**Public endpoint - no authentication required.**"
+              }
+            },
+            {
+              "name": "Get Event by ID (Public)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/events/id/{{event_id}}",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "events", "id", "{{event_id}}"]
+                },
+                "description": "Get event details by ID.\n\n**Public endpoint - no authentication required.**"
+              }
+            },
+            {
+              "name": "Create Event",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    const response = pm.response.json();",
+                      "    if (response.data && response.data.id) {",
+                      "        pm.collectionVariables.set('event_id', response.data.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Amazing Concert 2024\",\n  \"slug\": \"amazing-concert-2024\",\n  \"description\": \"The biggest concert of the year!\",\n  \"venue_name\": \"Impact Arena\",\n  \"venue_address\": \"Bangkok, Thailand\",\n  \"banner_url\": \"https://example.com/banner.jpg\",\n  \"thumbnail_url\": \"https://example.com/thumb.jpg\"\n}"
+                },
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/events",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "events"]
+                },
+                "description": "Create a new event.\n\n**Requires Admin or Organizer role.**\n\n**Request Body:**\n- `name` (required): Event name\n- `slug` (required): Unique URL-friendly identifier\n- `description`: Event description\n- `venue_name`: Venue name\n- `venue_address`: Venue address\n- `banner_url`: Banner image URL\n- `thumbnail_url`: Thumbnail image URL"
+              }
+            },
+            {
+              "name": "Update Event",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Amazing Concert 2024 - Updated\",\n  \"description\": \"Updated description for the concert\"\n}"
+                },
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/events/{{event_id}}",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "events", "{{event_id}}"]
+                },
+                "description": "Update event details.\n\n**Requires Admin or Organizer role.**"
+              }
+            },
+            {
+              "name": "Publish Event",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/events/{{event_id}}/publish",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "events", "{{event_id}}", "publish"]
+                },
+                "description": "Publish a draft event to make it visible to the public.\n\n**Requires Admin or Organizer role.**"
+              }
+            },
+            {
+              "name": "Delete Event",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/events/{{event_id}}",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "events", "{{event_id}}"]
+                },
+                "description": "Soft delete an event.\n\n**Requires Admin or Organizer role.**"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Shows",
+          "item": [
+            {
+              "name": "List Shows for Event (Public)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/events/amazing-concert-2024/shows",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "events", "amazing-concert-2024", "shows"]
+                },
+                "description": "List all shows for an event by event slug.\n\n**Public endpoint - no authentication required.**"
+              }
+            },
+            {
+              "name": "Get Show by ID (Public)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/shows/{{show_id}}",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "shows", "{{show_id}}"]
+                },
+                "description": "Get show details by ID.\n\n**Public endpoint - no authentication required.**"
+              }
+            },
+            {
+              "name": "Create Show",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    const response = pm.response.json();",
+                      "    if (response.data && response.data.id) {",
+                      "        pm.collectionVariables.set('show_id', response.data.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"show_date\": \"2024-12-25T19:00:00Z\",\n  \"doors_open\": \"2024-12-25T18:00:00Z\",\n  \"status\": \"on_sale\"\n}"
+                },
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/events/{{event_id}}/shows",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "events", "{{event_id}}", "shows"]
+                },
+                "description": "Create a new show for an event.\n\n**Requires Admin or Organizer role.**\n\n**Request Body:**\n- `show_date` (required): Show date and time (ISO 8601)\n- `doors_open`: When doors open\n- `status`: Show status (draft, on_sale, sold_out, cancelled)"
+              }
+            },
+            {
+              "name": "Update Show",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"show_date\": \"2024-12-26T20:00:00Z\",\n  \"status\": \"on_sale\"\n}"
+                },
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/shows/{{show_id}}",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "shows", "{{show_id}}"]
+                },
+                "description": "Update show details.\n\n**Requires Admin or Organizer role.**"
+              }
+            },
+            {
+              "name": "Delete Show",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/shows/{{show_id}}",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "shows", "{{show_id}}"]
+                },
+                "description": "Soft delete a show.\n\n**Requires Admin or Organizer role.**"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Zones",
+          "item": [
+            {
+              "name": "List Zones for Show (Public)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/shows/{{show_id}}/zones",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "shows", "{{show_id}}", "zones"]
+                },
+                "description": "List all zones for a show.\n\n**Public endpoint - no authentication required.**"
+              }
+            },
+            {
+              "name": "Get Zone by ID (Public)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/zones/{{zone_id}}",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "zones", "{{zone_id}}"]
+                },
+                "description": "Get zone details by ID.\n\n**Public endpoint - no authentication required.**"
+              }
+            },
+            {
+              "name": "Create Zone",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    const response = pm.response.json();",
+                      "    if (response.data && response.data.id) {",
+                      "        pm.collectionVariables.set('zone_id', response.data.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"VIP Zone A\",\n  \"price\": 5000.00,\n  \"total_seats\": 100,\n  \"available_seats\": 100,\n  \"max_per_booking\": 4\n}"
+                },
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/shows/{{show_id}}/zones",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "shows", "{{show_id}}", "zones"]
+                },
+                "description": "Create a new zone for a show.\n\n**Requires Admin or Organizer role.**\n\n**Request Body:**\n- `name` (required): Zone name\n- `price` (required): Ticket price for this zone\n- `total_seats` (required): Total number of seats\n- `available_seats`: Available seats (defaults to total_seats)\n- `max_per_booking`: Maximum tickets per booking (default: 4)"
+              }
+            },
+            {
+              "name": "Update Zone",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"VIP Zone A - Premium\",\n  \"price\": 6000.00\n}"
+                },
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/zones/{{zone_id}}",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "zones", "{{zone_id}}"]
+                },
+                "description": "Update zone details.\n\n**Requires Admin or Organizer role.**"
+              }
+            },
+            {
+              "name": "Delete Zone",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/zones/{{zone_id}}",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "zones", "{{zone_id}}"]
+                },
+                "description": "Soft delete a zone.\n\n**Requires Admin or Organizer role.**"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Booking Service",
+      "item": [
+        {
+          "name": "Reserve Seats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.collectionVariables.set('booking_id', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"show_zone_id\": \"{{zone_id}}\",\n  \"quantity\": 2\n}"
+            },
+            "url": {
+              "raw": "{{booking_url}}/api/v1/bookings/reserve",
+              "host": ["{{booking_url}}"],
+              "path": ["api", "v1", "bookings", "reserve"]
+            },
+            "description": "Reserve seats for a show zone.\n\nThis creates a temporary reservation with a TTL (typically 10-15 minutes). The reservation must be confirmed before expiry.\n\n**Uses Redis Lua scripts for atomic seat deduction to prevent overselling.**\n\n**Request Body:**\n- `show_zone_id` (required): Zone ID to book seats from\n- `quantity` (required): Number of seats to reserve"
+          }
+        },
+        {
+          "name": "Confirm Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment_method\": \"credit_card\"\n}"
+            },
+            "url": {
+              "raw": "{{booking_url}}/api/v1/bookings/{{booking_id}}/confirm",
+              "host": ["{{booking_url}}"],
+              "path": ["api", "v1", "bookings", "{{booking_id}}", "confirm"]
+            },
+            "description": "Confirm a pending booking and initiate payment processing.\n\nThis triggers the Saga orchestration for distributed transaction handling.\n\n**Request Body:**\n- `payment_method`: Payment method (credit_card, bank_transfer, etc.)"
+          }
+        },
+        {
+          "name": "Cancel Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{booking_url}}/api/v1/bookings/{{booking_id}}/cancel",
+              "host": ["{{booking_url}}"],
+              "path": ["api", "v1", "bookings", "{{booking_id}}", "cancel"]
+            },
+            "description": "Cancel a pending booking and release the reserved seats back to inventory."
+          }
+        },
+        {
+          "name": "Release Booking",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{booking_url}}/api/v1/bookings/{{booking_id}}",
+              "host": ["{{booking_url}}"],
+              "path": ["api", "v1", "bookings", "{{booking_id}}"]
+            },
+            "description": "Release/cancel a booking.\n\nAlternative endpoint for cancellation."
+          }
+        },
+        {
+          "name": "Get My Bookings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{booking_url}}/api/v1/bookings?page=1&page_size=10",
+              "host": ["{{booking_url}}"],
+              "path": ["api", "v1", "bookings"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get all bookings for the authenticated user.\n\n**Query Parameters:**\n- `page`: Page number (default: 1)\n- `page_size`: Items per page (default: 10)"
+          }
+        },
+        {
+          "name": "Get Pending Bookings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{booking_url}}/api/v1/bookings/pending?limit=10",
+              "host": ["{{booking_url}}"],
+              "path": ["api", "v1", "bookings", "pending"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get pending bookings that need to be confirmed or will expire.\n\n**Query Parameters:**\n- `limit`: Maximum number of items to return"
+          }
+        },
+        {
+          "name": "Get Booking by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{booking_url}}/api/v1/bookings/{{booking_id}}",
+              "host": ["{{booking_url}}"],
+              "path": ["api", "v1", "bookings", "{{booking_id}}"]
+            },
+            "description": "Get details of a specific booking."
+          }
+        },
+        {
+          "name": "Get Service Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{booking_url}}/api/v1/status",
+              "host": ["{{booking_url}}"],
+              "path": ["api", "v1", "status"]
+            },
+            "description": "Get booking service status."
+          }
+        },
+        {
+          "name": "Get Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{booking_url}}/metrics",
+              "host": ["{{booking_url}}"],
+              "path": ["metrics"]
+            },
+            "description": "Get database pool metrics and other service metrics."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment Service",
+      "item": [
+        {
+          "name": "Create Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.collectionVariables.set('payment_id', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"booking_id\": \"{{booking_id}}\",\n  \"amount\": 10000.00,\n  \"currency\": \"THB\",\n  \"method\": \"credit_card\"\n}"
+            },
+            "url": {
+              "raw": "{{payment_url}}/api/v1/payments?auto_process=false",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "v1", "payments"],
+              "query": [
+                {
+                  "key": "auto_process",
+                  "value": "false",
+                  "description": "Set to true to automatically process the payment"
+                }
+              ]
+            },
+            "description": "Create a new payment for a booking.\n\n**Request Body:**\n- `booking_id` (required): Associated booking ID\n- `amount` (required): Payment amount\n- `currency`: Currency code (default: THB)\n- `method`: Payment method (credit_card, bank_transfer, promptpay)\n\n**Query Parameters:**\n- `auto_process`: Set to true to automatically process the payment after creation"
+          }
+        },
+        {
+          "name": "Process Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/v1/payments/{{payment_id}}/process",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "v1", "payments", "{{payment_id}}", "process"]
+            },
+            "description": "Process a pending payment.\n\nThis calls the payment gateway (Stripe or mock) to process the payment."
+          }
+        },
+        {
+          "name": "Get Payment by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/v1/payments/{{payment_id}}",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "v1", "payments", "{{payment_id}}"]
+            },
+            "description": "Get payment details by payment ID."
+          }
+        },
+        {
+          "name": "Get Payment by Booking ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/v1/payments/booking/{{booking_id}}",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "v1", "payments", "booking", "{{booking_id}}"]
+            },
+            "description": "Get payment associated with a booking."
+          }
+        },
+        {
+          "name": "Get User Payments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/v1/payments/user/{{user_id}}?limit=10&offset=0",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "v1", "payments", "user", "{{user_id}}"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "List all payments for a specific user.\n\n**Query Parameters:**\n- `limit`: Number of items per page\n- `offset`: Number of items to skip"
+          }
+        },
+        {
+          "name": "Refund Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/v1/payments/{{payment_id}}/refund",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "v1", "payments", "{{payment_id}}", "refund"]
+            },
+            "description": "Refund a completed payment.\n\nThis will initiate a refund through the payment gateway."
+          }
+        },
+        {
+          "name": "Cancel Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_url}}/api/v1/payments/{{payment_id}}/cancel",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "v1", "payments", "{{payment_id}}", "cancel"]
+            },
+            "description": "Cancel a pending payment."
+          }
+        },
+        {
+          "name": "Get Service Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{payment_url}}/api/v1/status",
+              "host": ["{{payment_url}}"],
+              "path": ["api", "v1", "status"]
+            },
+            "description": "Get payment service status."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflows",
+      "item": [
+        {
+          "name": "Complete Booking Flow",
+          "item": [
+            {
+              "name": "1. Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    const response = pm.response.json();",
+                      "    if (response.data) {",
+                      "        pm.collectionVariables.set('access_token', response.data.access_token);",
+                      "        pm.collectionVariables.set('refresh_token', response.data.refresh_token);",
+                      "        pm.collectionVariables.set('user_id', response.data.user.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"Password123!\"\n}"
+                },
+                "url": {
+                  "raw": "{{auth_url}}/api/v1/auth/login",
+                  "host": ["{{auth_url}}"],
+                  "path": ["api", "v1", "auth", "login"]
+                }
+              }
+            },
+            {
+              "name": "2. Browse Events",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/events",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "events"]
+                }
+              }
+            },
+            {
+              "name": "3. Get Event Shows",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    const response = pm.response.json();",
+                      "    if (response.data && response.data.length > 0) {",
+                      "        pm.collectionVariables.set('show_id', response.data[0].id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/events/amazing-concert-2024/shows",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "events", "amazing-concert-2024", "shows"]
+                }
+              }
+            },
+            {
+              "name": "4. Get Show Zones",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    const response = pm.response.json();",
+                      "    if (response.data && response.data.length > 0) {",
+                      "        pm.collectionVariables.set('zone_id', response.data[0].id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{ticket_url}}/api/v1/shows/{{show_id}}/zones",
+                  "host": ["{{ticket_url}}"],
+                  "path": ["api", "v1", "shows", "{{show_id}}", "zones"]
+                }
+              }
+            },
+            {
+              "name": "5. Reserve Seats",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201 || pm.response.code === 200) {",
+                      "    const response = pm.response.json();",
+                      "    if (response.data && response.data.id) {",
+                      "        pm.collectionVariables.set('booking_id', response.data.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"show_zone_id\": \"{{zone_id}}\",\n  \"quantity\": 2\n}"
+                },
+                "url": {
+                  "raw": "{{booking_url}}/api/v1/bookings/reserve",
+                  "host": ["{{booking_url}}"],
+                  "path": ["api", "v1", "bookings", "reserve"]
+                }
+              }
+            },
+            {
+              "name": "6. Confirm Booking",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"payment_method\": \"credit_card\"\n}"
+                },
+                "url": {
+                  "raw": "{{booking_url}}/api/v1/bookings/{{booking_id}}/confirm",
+                  "host": ["{{booking_url}}"],
+                  "path": ["api", "v1", "bookings", "{{booking_id}}", "confirm"]
+                }
+              }
+            },
+            {
+              "name": "7. Check Booking Status",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{booking_url}}/api/v1/bookings/{{booking_id}}",
+                  "host": ["{{booking_url}}"],
+                  "path": ["api", "v1", "bookings", "{{booking_id}}"]
+                }
+              }
+            }
+          ],
+          "description": "Complete end-to-end booking flow:\n1. Login to get tokens\n2. Browse available events\n3. Select event and view shows\n4. View zones and pricing\n5. Reserve seats\n6. Confirm booking with payment\n7. Check final booking status"
+        }
+      ],
+      "description": "Pre-built workflows for common use cases. Run requests in sequence."
+    }
+  ]
+}
