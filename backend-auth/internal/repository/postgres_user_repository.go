@@ -49,7 +49,7 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User) 
 // GetByID retrieves a user by ID
 func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, name, role, COALESCE(tenant_id::text, '') as tenant_id, is_active, created_at, updated_at
+		SELECT id, email, password_hash, name, role, COALESCE(tenant_id::text, '') as tenant_id, COALESCE(stripe_customer_id, '') as stripe_customer_id, is_active, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
@@ -61,6 +61,7 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 		&user.Name,
 		&user.Role,
 		&user.TenantID,
+		&user.StripeCustomerID,
 		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -77,7 +78,7 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 // GetByEmail retrieves a user by email
 func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, name, role, COALESCE(tenant_id::text, '') as tenant_id, is_active, created_at, updated_at
+		SELECT id, email, password_hash, name, role, COALESCE(tenant_id::text, '') as tenant_id, COALESCE(stripe_customer_id, '') as stripe_customer_id, is_active, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`
@@ -89,6 +90,7 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 		&user.Name,
 		&user.Role,
 		&user.TenantID,
+		&user.StripeCustomerID,
 		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -106,10 +108,17 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 func (r *PostgresUserRepository) Update(ctx context.Context, user *domain.User) error {
 	query := `
 		UPDATE users
-		SET email = $2, password_hash = $3, name = $4, role = $5, tenant_id = $6, is_active = $7, updated_at = $8
+		SET email = $2, password_hash = $3, name = $4, role = $5, tenant_id = $6, stripe_customer_id = $7, is_active = $8, updated_at = $9
 		WHERE id = $1
 	`
 	user.UpdatedAt = time.Now()
+
+	// Convert empty stripe_customer_id to nil for NULL in database
+	var stripeCustomerID interface{}
+	if user.StripeCustomerID != "" {
+		stripeCustomerID = user.StripeCustomerID
+	}
+
 	_, err := r.pool.Exec(ctx, query,
 		user.ID,
 		user.Email,
@@ -117,6 +126,7 @@ func (r *PostgresUserRepository) Update(ctx context.Context, user *domain.User) 
 		user.Name,
 		user.Role,
 		user.TenantID,
+		stripeCustomerID,
 		user.IsActive,
 		user.UpdatedAt,
 	)
@@ -136,4 +146,11 @@ func (r *PostgresUserRepository) ExistsByEmail(ctx context.Context, email string
 	var exists bool
 	err := r.pool.QueryRow(ctx, query, email).Scan(&exists)
 	return exists, err
+}
+
+// UpdateStripeCustomerID updates the Stripe Customer ID for a user
+func (r *PostgresUserRepository) UpdateStripeCustomerID(ctx context.Context, userID, stripeCustomerID string) error {
+	query := `UPDATE users SET stripe_customer_id = $2, updated_at = $3 WHERE id = $1`
+	_, err := r.pool.Exec(ctx, query, userID, stripeCustomerID, time.Now())
+	return err
 }

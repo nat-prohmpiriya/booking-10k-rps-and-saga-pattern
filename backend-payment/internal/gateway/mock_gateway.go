@@ -270,3 +270,60 @@ func (g *MockGateway) ConfirmPaymentIntent(ctx context.Context, paymentIntentID 
 		Currency:        info.Currency,
 	}, nil
 }
+
+// CreateCustomer creates a mock Stripe Customer
+func (g *MockGateway) CreateCustomer(ctx context.Context, req *CreateCustomerRequest) (*CustomerResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("create customer request is required")
+	}
+	if req.Email == "" {
+		return nil, fmt.Errorf("email is required")
+	}
+
+	// Simulate processing delay
+	if g.config.DelayMs > 0 {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Duration(g.config.DelayMs) * time.Millisecond):
+		}
+	}
+
+	// Generate mock customer ID
+	customerID := fmt.Sprintf("cus_mock_%s", uuid.New().String()[:12])
+
+	return &CustomerResponse{
+		CustomerID: customerID,
+		Email:      req.Email,
+		Name:       req.Name,
+	}, nil
+}
+
+// CreatePortalSession creates a mock Customer Portal session
+func (g *MockGateway) CreatePortalSession(ctx context.Context, req *PortalSessionRequest) (*PortalSessionResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("portal session request is required")
+	}
+	if req.CustomerID == "" {
+		return nil, fmt.Errorf("customer ID is required")
+	}
+	if req.ReturnURL == "" {
+		return nil, fmt.Errorf("return URL is required")
+	}
+
+	// Simulate processing delay
+	if g.config.DelayMs > 0 {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Duration(g.config.DelayMs) * time.Millisecond):
+		}
+	}
+
+	// Generate mock portal URL
+	portalURL := fmt.Sprintf("https://billing.stripe.com/mock/session/%s", uuid.New().String()[:16])
+
+	return &PortalSessionResponse{
+		URL: portalURL,
+	}, nil
+}

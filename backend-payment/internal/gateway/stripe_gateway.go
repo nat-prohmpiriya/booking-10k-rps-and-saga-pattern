@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/stripe/stripe-go/v76"
+	"github.com/stripe/stripe-go/v76/billingportal/session"
+	"github.com/stripe/stripe-go/v76/customer"
 	"github.com/stripe/stripe-go/v76/paymentintent"
 	"github.com/stripe/stripe-go/v76/refund"
 )
@@ -234,5 +236,70 @@ func (g *StripeGateway) ConfirmPaymentIntent(ctx context.Context, paymentIntentI
 		Status:          string(pi.Status),
 		Amount:          float64(pi.Amount),
 		Currency:        string(pi.Currency),
+	}, nil
+}
+
+// CreateCustomer creates a Stripe Customer
+func (g *StripeGateway) CreateCustomer(ctx context.Context, req *CreateCustomerRequest) (*CustomerResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("create customer request is required")
+	}
+	if req.Email == "" {
+		return nil, fmt.Errorf("email is required")
+	}
+
+	params := &stripe.CustomerParams{
+		Email: stripe.String(req.Email),
+	}
+
+	if req.Name != "" {
+		params.Name = stripe.String(req.Name)
+	}
+
+	// Add metadata
+	if req.Metadata != nil {
+		params.Metadata = req.Metadata
+	}
+	if params.Metadata == nil {
+		params.Metadata = make(map[string]string)
+	}
+	params.Metadata["user_id"] = req.UserID
+
+	cust, err := customer.New(params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create customer: %w", err)
+	}
+
+	return &CustomerResponse{
+		CustomerID: cust.ID,
+		Email:      cust.Email,
+		Name:       cust.Name,
+	}, nil
+}
+
+// CreatePortalSession creates a Stripe Customer Portal session
+func (g *StripeGateway) CreatePortalSession(ctx context.Context, req *PortalSessionRequest) (*PortalSessionResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("portal session request is required")
+	}
+	if req.CustomerID == "" {
+		return nil, fmt.Errorf("customer ID is required")
+	}
+	if req.ReturnURL == "" {
+		return nil, fmt.Errorf("return URL is required")
+	}
+
+	params := &stripe.BillingPortalSessionParams{
+		Customer:  stripe.String(req.CustomerID),
+		ReturnURL: stripe.String(req.ReturnURL),
+	}
+
+	sess, err := session.New(params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create portal session: %w", err)
+	}
+
+	return &PortalSessionResponse{
+		URL: sess.URL,
 	}, nil
 }

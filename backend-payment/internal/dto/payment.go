@@ -95,3 +95,13 @@ type ConfirmPaymentRequest struct {
 	PaymentID       string `json:"payment_id" binding:"required"`
 	PaymentIntentID string `json:"payment_intent_id" binding:"required"`
 }
+
+// CreatePortalSessionRequest represents a request to create a Stripe Customer Portal session
+type CreatePortalSessionRequest struct {
+	ReturnURL string `json:"return_url" binding:"required"`
+}
+
+// PortalSessionResponse represents a Stripe Customer Portal session response
+type PortalSessionResponse struct {
+	URL string `json:"url"`
+}

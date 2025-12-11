@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useAuth } from "@/contexts/auth-context"
+import { paymentApi } from "@/lib/api/payment"
 import {
   User,
   Mail,
@@ -30,6 +31,7 @@ import {
   Globe,
   Phone,
   MapPin,
+  Loader2,
 } from "lucide-react"
 
 interface ProfileFormData {
@@ -61,7 +63,15 @@ function ProfileSkeleton() {
   )
 }
 
-const MENU_ITEMS = [
+interface MenuItem {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  description: string
+  href?: string
+  action?: "payment-portal"
+}
+
+const MENU_ITEMS: MenuItem[] = [
   {
     icon: Ticket,
     label: "My Bookings",
@@ -72,25 +82,7 @@ const MENU_ITEMS = [
     icon: CreditCard,
     label: "Payment Methods",
     description: "Manage your saved payment methods",
-    href: "/profile/payments",
-  },
-  {
-    icon: Bell,
-    label: "Notifications",
-    description: "Configure your notification preferences",
-    href: "/profile/notifications",
-  },
-  {
-    icon: Lock,
-    label: "Security",
-    description: "Password and security settings",
-    href: "/profile/security",
-  },
-  {
-    icon: Globe,
-    label: "Language & Region",
-    description: "Set your preferred language and region",
-    href: "/profile/preferences",
+    action: "payment-portal",
   },
 ]
 
@@ -99,6 +91,7 @@ export default function ProfilePage() {
   const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isLoadingPortal, setIsLoadingPortal] = useState(false)
   const [formData, setFormData] = useState<ProfileFormData>({
     name: "",
     email: "",
@@ -150,6 +143,30 @@ export default function ProfilePage() {
   const handleLogout = () => {
     logout()
     router.push("/")
+  }
+
+  const handlePaymentPortal = async () => {
+    if (isLoadingPortal) return
+
+    setIsLoadingPortal(true)
+    try {
+      const returnUrl = window.location.href
+      const response = await paymentApi.createPortalSession(returnUrl)
+      window.location.href = response.url
+    } catch (error) {
+      console.error("Failed to create portal session:", error)
+      alert("Failed to open payment settings. Please try again.")
+    } finally {
+      setIsLoadingPortal(false)
+    }
+  }
+
+  const handleMenuItemClick = (item: MenuItem) => {
+    if (item.action === "payment-portal") {
+      handlePaymentPortal()
+    } else if (item.href) {
+      router.push(item.href)
+    }
   }
 
   const getInitials = (name: string) => {
@@ -385,24 +402,54 @@ export default function ProfilePage() {
                   </h3>
                 </div>
                 <div className="divide-y divide-border/50">
-                  {MENU_ITEMS.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="flex items-center gap-4 p-4 hover:bg-primary/5 transition-colors group"
-                    >
-                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                        <item.icon className="h-5 w-5" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-foreground group-hover:text-primary transition-colors">
-                          {item.label}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{item.description}</p>
-                      </div>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                    </Link>
-                  ))}
+                  {MENU_ITEMS.map((item) => {
+                    const isLoading = item.action === "payment-portal" && isLoadingPortal
+
+                    if (item.href) {
+                      return (
+                        <Link
+                          key={item.label}
+                          href={item.href}
+                          className="flex items-center gap-4 p-4 hover:bg-primary/5 transition-colors group"
+                        >
+                          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                            <item.icon className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-foreground group-hover:text-primary transition-colors">
+                              {item.label}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{item.description}</p>
+                          </div>
+                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                        </Link>
+                      )
+                    }
+
+                    return (
+                      <button
+                        key={item.label}
+                        onClick={() => handleMenuItemClick(item)}
+                        disabled={isLoading}
+                        className="flex items-center gap-4 p-4 hover:bg-primary/5 transition-colors group w-full text-left disabled:opacity-50"
+                      >
+                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                          {isLoading ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <item.icon className="h-5 w-5" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-foreground group-hover:text-primary transition-colors">
+                            {isLoading ? "Opening..." : item.label}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{item.description}</p>
+                        </div>
+                        <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 

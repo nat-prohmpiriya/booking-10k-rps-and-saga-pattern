@@ -157,6 +157,20 @@ func (m *mockPaymentGateway) ConfirmPaymentIntent(ctx context.Context, paymentIn
 	}, nil
 }
 
+func (m *mockPaymentGateway) CreateCustomer(ctx context.Context, req *gateway.CreateCustomerRequest) (*gateway.CustomerResponse, error) {
+	return &gateway.CustomerResponse{
+		CustomerID: "cus_mock_" + req.UserID,
+		Email:      req.Email,
+		Name:       req.Name,
+	}, nil
+}
+
+func (m *mockPaymentGateway) CreatePortalSession(ctx context.Context, req *gateway.PortalSessionRequest) (*gateway.PortalSessionResponse, error) {
+	return &gateway.PortalSessionResponse{
+		URL: "https://billing.stripe.com/mock/session/test",
+	}, nil
+}
+
 func (m *mockPaymentGateway) Name() string {
 	return "mock"
 }

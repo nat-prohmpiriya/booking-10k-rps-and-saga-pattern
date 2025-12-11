@@ -221,9 +221,11 @@ func main() {
 				if idempotencyConfig != nil {
 					payments.POST("/intent", middleware.IdempotencyMiddleware(idempotencyConfig), container.PaymentHandler.CreatePaymentIntent)
 					payments.POST("/intent/confirm", middleware.IdempotencyMiddleware(idempotencyConfig), container.PaymentHandler.ConfirmPaymentIntent)
+					payments.POST("/portal", middleware.IdempotencyMiddleware(idempotencyConfig), container.PaymentHandler.CreatePortalSession)
 				} else {
 					payments.POST("/intent", container.PaymentHandler.CreatePaymentIntent)
 					payments.POST("/intent/confirm", container.PaymentHandler.ConfirmPaymentIntent)
+					payments.POST("/portal", container.PaymentHandler.CreatePortalSession)
 				}
 			}
 		}

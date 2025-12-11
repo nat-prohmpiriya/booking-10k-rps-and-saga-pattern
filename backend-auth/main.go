@@ -125,7 +125,16 @@ func main() {
 			protected.Use(authMiddleware(container.AuthService))
 			{
 				protected.GET("/me", container.AuthHandler.Me)
+				protected.PUT("/me", container.AuthHandler.UpdateMe)
 				protected.POST("/logout-all", container.AuthHandler.LogoutAll)
+			}
+
+			// Internal endpoints for service-to-service communication
+			// These endpoints are used by payment-service to manage Stripe Customer IDs
+			internal := auth.Group("/users")
+			{
+				internal.GET("/:id/stripe-customer", container.AuthHandler.GetStripeCustomerID)
+				internal.PUT("/:id/stripe-customer", container.AuthHandler.UpdateStripeCustomerID)
 			}
 		}
 

@@ -16,15 +16,16 @@ const (
 
 // User represents a user entity
 type User struct {
-	ID           string    `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"` // Never serialize password
-	Name         string    `json:"name"`
-	Role         Role      `json:"role"`
-	TenantID     string    `json:"tenant_id"` // For multi-tenant support
-	IsActive     bool      `json:"is_active"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID               string    `json:"id"`
+	Email            string    `json:"email"`
+	PasswordHash     string    `json:"-"` // Never serialize password
+	Name             string    `json:"name"`
+	Role             Role      `json:"role"`
+	TenantID         string    `json:"tenant_id"`          // For multi-tenant support
+	StripeCustomerID string    `json:"stripe_customer_id"` // Stripe Customer ID for payment portal
+	IsActive         bool      `json:"is_active"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // Session represents a user session

@@ -249,3 +249,56 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
 		"tenant_id": claims.TenantID,
 	}))
 }
+
+// GetStripeCustomerID returns the Stripe Customer ID for a user
+// GET /api/v1/auth/users/:id/stripe-customer
+func (h *AuthHandler) GetStripeCustomerID(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, response.BadRequest("user_id is required"))
+		return
+	}
+
+	stripeCustomerID, err := h.authService.GetStripeCustomerID(c.Request.Context(), userID)
+	if err != nil {
+		if errors.Is(err, service.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, response.NotFound("User not found"))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, response.InternalError(err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, response.Success(gin.H{
+		"user_id":            userID,
+		"stripe_customer_id": stripeCustomerID,
+	}))
+}
+
+// UpdateStripeCustomerID updates the Stripe Customer ID for a user
+// PUT /api/v1/auth/users/:id/stripe-customer
+func (h *AuthHandler) UpdateStripeCustomerID(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, response.BadRequest("user_id is required"))
+		return
+	}
+
+	var req struct {
+		StripeCustomerID string `json:"stripe_customer_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, response.BadRequest(err.Error()))
+		return
+	}
+
+	if err := h.authService.UpdateStripeCustomerID(c.Request.Context(), userID, req.StripeCustomerID); err != nil {
+		c.JSON(http.StatusInternalServerError, response.InternalError(err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, response.Success(gin.H{
+		"user_id":            userID,
+		"stripe_customer_id": req.StripeCustomerID,
+	}))
+}

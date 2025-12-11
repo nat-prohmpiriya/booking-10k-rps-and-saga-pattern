@@ -20,6 +20,8 @@ type UserRepository interface {
 	Delete(ctx context.Context, id string) error
 	// ExistsByEmail checks if a user exists with the given email
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
+	// UpdateStripeCustomerID updates the Stripe Customer ID for a user
+	UpdateStripeCustomerID(ctx context.Context, userID, stripeCustomerID string) error
 }
 
 // SessionRepository defines the interface for session data access

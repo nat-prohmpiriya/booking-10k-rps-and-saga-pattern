@@ -51,6 +51,10 @@ type AuthService interface {
 	GetUser(ctx context.Context, id string) (*domain.User, error)
 	// UpdateProfile updates user profile
 	UpdateProfile(ctx context.Context, userID string, req *dto.UpdateProfileRequest) (*domain.User, error)
+	// GetStripeCustomerID retrieves the Stripe Customer ID for a user
+	GetStripeCustomerID(ctx context.Context, userID string) (string, error)
+	// UpdateStripeCustomerID updates the Stripe Customer ID for a user
+	UpdateStripeCustomerID(ctx context.Context, userID, stripeCustomerID string) error
 }
 
 // authService implements AuthService
@@ -361,4 +365,21 @@ func (s *authService) toUserResponse(user *domain.User) dto.UserResponse {
 		Role:      string(user.Role),
 		CreatedAt: user.CreatedAt.Format(time.RFC3339),
 	}
+}
+
+// GetStripeCustomerID retrieves the Stripe Customer ID for a user
+func (s *authService) GetStripeCustomerID(ctx context.Context, userID string) (string, error) {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	if user == nil {
+		return "", ErrUserNotFound
+	}
+	return user.StripeCustomerID, nil
+}
+
+// UpdateStripeCustomerID updates the Stripe Customer ID for a user
+func (s *authService) UpdateStripeCustomerID(ctx context.Context, userID, stripeCustomerID string) error {
+	return s.userRepo.UpdateStripeCustomerID(ctx, userID, stripeCustomerID)
 }

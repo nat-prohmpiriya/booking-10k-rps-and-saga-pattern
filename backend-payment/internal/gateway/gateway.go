@@ -21,6 +21,12 @@ type PaymentGateway interface {
 	// ConfirmPaymentIntent confirms a PaymentIntent after client-side completion
 	ConfirmPaymentIntent(ctx context.Context, paymentIntentID string) (*PaymentIntentResponse, error)
 
+	// CreateCustomer creates a Stripe Customer
+	CreateCustomer(ctx context.Context, req *CreateCustomerRequest) (*CustomerResponse, error)
+
+	// CreatePortalSession creates a Stripe Customer Portal session
+	CreatePortalSession(ctx context.Context, req *PortalSessionRequest) (*PortalSessionResponse, error)
+
 	// Name returns the gateway name
 	Name() string
 }
@@ -88,4 +94,30 @@ type PaymentIntentResponse struct {
 	Status          string
 	Amount          float64
 	Currency        string
+}
+
+// CreateCustomerRequest represents a request to create a Stripe Customer
+type CreateCustomerRequest struct {
+	UserID   string
+	Email    string
+	Name     string
+	Metadata map[string]string
+}
+
+// CustomerResponse represents a Stripe Customer response
+type CustomerResponse struct {
+	CustomerID string
+	Email      string
+	Name       string
+}
+
+// PortalSessionRequest represents a request to create a Customer Portal session
+type PortalSessionRequest struct {
+	CustomerID string
+	ReturnURL  string
+}
+
+// PortalSessionResponse represents a Customer Portal session response
+type PortalSessionResponse struct {
+	URL string
 }

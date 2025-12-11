@@ -1,9 +1,15 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-payment/internal/domain"
@@ -377,4 +383,138 @@ func (h *PaymentHandler) ConfirmPaymentIntent(c *gin.Context) {
 		"payment_intent_id": req.PaymentIntentID,
 		"stripe_status":     intentResp.Status,
 	}))
+}
+
+// CreatePortalSession handles POST /payments/portal
+// Creates a Stripe Customer Portal session for managing payment methods
+func (h *PaymentHandler) CreatePortalSession(c *gin.Context) {
+	var req dto.CreatePortalSessionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, dto.NewErrorResponse("VALIDATION_ERROR", err.Error()))
+		return
+	}
+
+	// Get user info from headers (set by API Gateway after JWT validation)
+	userID := c.GetHeader("X-User-ID")
+	userEmail := c.GetHeader("X-User-Email")
+	if userID == "" {
+		userID = c.GetString("user_id")
+	}
+	if userEmail == "" {
+		userEmail = c.GetString("email")
+	}
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, dto.NewErrorResponse("UNAUTHORIZED", "user_id is required"))
+		return
+	}
+
+	// Get Stripe Customer ID from Auth Service
+	authServiceURL := os.Getenv("AUTH_SERVICE_URL")
+	if authServiceURL == "" {
+		authServiceURL = "http://localhost:8081"
+	}
+
+	stripeCustomerID, err := h.getStripeCustomerID(authServiceURL, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.NewErrorResponse("AUTH_SERVICE_ERROR", err.Error()))
+		return
+	}
+
+	// If user doesn't have a Stripe Customer ID, create one
+	if stripeCustomerID == "" {
+		customerResp, err := h.paymentGateway.CreateCustomer(c.Request.Context(), &gateway.CreateCustomerRequest{
+			UserID: userID,
+			Email:  userEmail,
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, dto.NewErrorResponse("CREATE_CUSTOMER_FAILED", err.Error()))
+			return
+		}
+		stripeCustomerID = customerResp.CustomerID
+
+		// Save the Stripe Customer ID to Auth Service
+		if err := h.updateStripeCustomerID(authServiceURL, userID, stripeCustomerID); err != nil {
+			// Log the error but continue - portal will still work
+			fmt.Printf("Failed to save Stripe Customer ID: %v\n", err)
+		}
+	}
+
+	// Create Portal Session
+	portalResp, err := h.paymentGateway.CreatePortalSession(c.Request.Context(), &gateway.PortalSessionRequest{
+		CustomerID: stripeCustomerID,
+		ReturnURL:  req.ReturnURL,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.NewErrorResponse("CREATE_PORTAL_FAILED", err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.NewSuccessResponse(&dto.PortalSessionResponse{
+		URL: portalResp.URL,
+	}))
+}
+
+// getStripeCustomerID fetches Stripe Customer ID from Auth Service
+func (h *PaymentHandler) getStripeCustomerID(authServiceURL, userID string) (string, error) {
+	url := fmt.Sprintf("%s/api/v1/auth/users/%s/stripe-customer", authServiceURL, userID)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("failed to call auth service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("auth service error: %s", string(body))
+	}
+
+	var result struct {
+		Success bool `json:"success"`
+		Data    struct {
+			StripeCustomerID string `json:"stripe_customer_id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result.Data.StripeCustomerID, nil
+}
+
+// updateStripeCustomerID saves Stripe Customer ID to Auth Service
+func (h *PaymentHandler) updateStripeCustomerID(authServiceURL, userID, stripeCustomerID string) error {
+	url := fmt.Sprintf("%s/api/v1/auth/users/%s/stripe-customer", authServiceURL, userID)
+
+	body, err := json.Marshal(map[string]string{
+		"stripe_customer_id": stripeCustomerID,
+	})
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to call auth service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("auth service error: %s", string(respBody))
+	}
+
+	return nil
 }

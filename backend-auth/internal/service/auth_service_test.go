@@ -61,6 +61,14 @@ func (r *mockUserRepository) ExistsByEmail(ctx context.Context, email string) (b
 	return exists, nil
 }
 
+func (r *mockUserRepository) UpdateStripeCustomerID(ctx context.Context, userID, stripeCustomerID string) error {
+	user := r.users[userID]
+	if user != nil {
+		user.StripeCustomerID = stripeCustomerID
+	}
+	return nil
+}
+
 // mockSessionRepository is a mock implementation of SessionRepository
 type mockSessionRepository struct {
 	sessions          map[string]*domain.Session
