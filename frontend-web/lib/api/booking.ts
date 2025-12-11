@@ -28,11 +28,17 @@ export const bookingApi = {
   },
 
   async confirmBooking(bookingId: string, data?: ConfirmBookingRequest): Promise<ConfirmBookingResponse> {
-    return apiClient.post<ConfirmBookingResponse>(`/bookings/${bookingId}/confirm`, data || {})
+    const idempotencyKey = `confirm-${bookingId}-${Date.now()}`
+    return apiClient.post<ConfirmBookingResponse>(`/bookings/${bookingId}/confirm`, data || {}, {
+      headers: { "X-Idempotency-Key": idempotencyKey }
+    })
   },
 
   async releaseBooking(bookingId: string): Promise<{ booking_id: string; status: string; message: string }> {
-    return apiClient.post(`/bookings/${bookingId}/release`, {})
+    const idempotencyKey = `release-${bookingId}-${Date.now()}`
+    return apiClient.post(`/bookings/${bookingId}/release`, {}, {
+      headers: { "X-Idempotency-Key": idempotencyKey }
+    })
   },
 
   async getBooking(bookingId: string): Promise<BookingResponse> {
@@ -46,7 +52,11 @@ export const bookingApi = {
 
 export const paymentApi = {
   async createPayment(data: CreatePaymentRequest): Promise<PaymentResponse> {
-    return apiClient.post<PaymentResponse>("/payments", data, { requireAuth: true })
+    const idempotencyKey = `payment-${data.booking_id}-${Date.now()}`
+    return apiClient.post<PaymentResponse>("/payments", data, {
+      requireAuth: true,
+      headers: { "X-Idempotency-Key": idempotencyKey }
+    })
   },
 
   async getPayment(paymentId: string): Promise<PaymentResponse> {
@@ -55,11 +65,19 @@ export const paymentApi = {
 
   // Stripe PaymentIntent APIs
   async createPaymentIntent(data: CreatePaymentIntentRequest): Promise<PaymentIntentResponse> {
-    return apiClient.post<PaymentIntentResponse>("/payments/intent", data, { requireAuth: true })
+    const idempotencyKey = `payment-intent-${data.booking_id}-${Date.now()}`
+    return apiClient.post<PaymentIntentResponse>("/payments/intent", data, {
+      requireAuth: true,
+      headers: { "X-Idempotency-Key": idempotencyKey }
+    })
   },
 
   async confirmPaymentIntent(data: ConfirmPaymentIntentRequest): Promise<{ payment_id: string; status: string; payment_intent_id: string; stripe_status: string }> {
-    return apiClient.post("/payments/intent/confirm", data, { requireAuth: true })
+    const idempotencyKey = `payment-confirm-${data.payment_intent_id}-${Date.now()}`
+    return apiClient.post("/payments/intent/confirm", data, {
+      requireAuth: true,
+      headers: { "X-Idempotency-Key": idempotencyKey }
+    })
   },
 }
 

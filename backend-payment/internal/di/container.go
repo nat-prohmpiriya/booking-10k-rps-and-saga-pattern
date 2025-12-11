@@ -27,15 +27,17 @@ type Container struct {
 	// Handlers
 	HealthHandler  *handler.HealthHandler
 	PaymentHandler *handler.PaymentHandler
+	WebhookHandler *handler.WebhookHandler
 }
 
 // ContainerConfig contains configuration for building the container
 type ContainerConfig struct {
-	DB             *database.PostgresDB
-	Redis          *redis.Client
-	PaymentRepo    repository.PaymentRepository
-	PaymentGateway gateway.PaymentGateway
-	ServiceConfig  *service.PaymentServiceConfig
+	DB                   *database.PostgresDB
+	Redis                *redis.Client
+	PaymentRepo          repository.PaymentRepository
+	PaymentGateway       gateway.PaymentGateway
+	ServiceConfig        *service.PaymentServiceConfig
+	StripeWebhookSecret  string
 }
 
 // NewContainer creates a new dependency injection container
@@ -54,6 +56,11 @@ func NewContainer(cfg *ContainerConfig) *Container {
 	if c.PaymentRepo != nil && c.PaymentGateway != nil {
 		c.PaymentService = service.NewPaymentService(c.PaymentRepo, c.PaymentGateway, cfg.ServiceConfig)
 		c.PaymentHandler = handler.NewPaymentHandler(c.PaymentService, c.PaymentGateway)
+
+		// Initialize WebhookHandler if webhook secret is provided
+		if cfg.StripeWebhookSecret != "" {
+			c.WebhookHandler = handler.NewWebhookHandler(c.PaymentService, cfg.StripeWebhookSecret)
+		}
 	}
 
 	return c

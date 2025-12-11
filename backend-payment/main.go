@@ -140,12 +140,19 @@ func main() {
 		appLog.Warn("Using in-memory payment repository (data will not persist)")
 	}
 
+	// Get Stripe webhook secret
+	stripeWebhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+	if stripeWebhookSecret != "" {
+		appLog.Info("Stripe webhook secret configured")
+	}
+
 	// Build dependency injection container
 	container := di.NewContainer(&di.ContainerConfig{
-		DB:             db,
-		Redis:          redisClient,
-		PaymentRepo:    paymentRepo,
-		PaymentGateway: paymentGateway,
+		DB:                  db,
+		Redis:               redisClient,
+		PaymentRepo:         paymentRepo,
+		PaymentGateway:      paymentGateway,
+		StripeWebhookSecret: stripeWebhookSecret,
 		ServiceConfig: &service.PaymentServiceConfig{
 			Currency:        "THB",
 			GatewayType:     gatewayType,
@@ -219,6 +226,12 @@ func main() {
 					payments.POST("/intent/confirm", container.PaymentHandler.ConfirmPaymentIntent)
 				}
 			}
+		}
+
+		// Stripe Webhook endpoint (no auth required, uses signature verification)
+		if container.WebhookHandler != nil {
+			v1.POST("/webhooks/stripe", container.WebhookHandler.HandleStripeWebhook)
+			appLog.Info("Stripe webhook endpoint enabled at /api/v1/webhooks/stripe")
 		}
 	}
 

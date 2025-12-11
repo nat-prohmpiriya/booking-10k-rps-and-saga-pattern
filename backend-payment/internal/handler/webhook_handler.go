@@ -1,0 +1,200 @@
+package handler
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/prohmpiriya/booking-rush-10k-rps/backend-payment/internal/service"
+	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/logger"
+	"github.com/stripe/stripe-go/v76"
+	"github.com/stripe/stripe-go/v76/webhook"
+)
+
+// WebhookHandler handles Stripe webhook events
+type WebhookHandler struct {
+	paymentService service.PaymentService
+	webhookSecret  string
+}
+
+// NewWebhookHandler creates a new WebhookHandler
+func NewWebhookHandler(paymentService service.PaymentService, webhookSecret string) *WebhookHandler {
+	return &WebhookHandler{
+		paymentService: paymentService,
+		webhookSecret:  webhookSecret,
+	}
+}
+
+// HandleStripeWebhook handles incoming Stripe webhook events
+func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
+	log := logger.Get()
+
+	// Read request body
+	payload, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		log.Error(fmt.Sprintf("Failed to read webhook body: %v", err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
+		return
+	}
+
+	// Get Stripe signature header
+	sigHeader := c.GetHeader("Stripe-Signature")
+	if sigHeader == "" {
+		log.Warn("Missing Stripe-Signature header")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing Stripe-Signature header"})
+		return
+	}
+
+	// Verify webhook signature
+	event, err := webhook.ConstructEvent(payload, sigHeader, h.webhookSecret)
+	if err != nil {
+		log.Error(fmt.Sprintf("Failed to verify webhook signature: %v", err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid signature"})
+		return
+	}
+
+	log.Info(fmt.Sprintf("Received Stripe webhook event: %s", event.Type))
+
+	// Handle different event types
+	switch event.Type {
+	case "payment_intent.succeeded":
+		h.handlePaymentIntentSucceeded(c, event)
+	case "payment_intent.payment_failed":
+		h.handlePaymentIntentFailed(c, event)
+	case "payment_intent.canceled":
+		h.handlePaymentIntentCanceled(c, event)
+	case "charge.refunded":
+		h.handleChargeRefunded(c, event)
+	default:
+		log.Info(fmt.Sprintf("Unhandled event type: %s", event.Type))
+		c.JSON(http.StatusOK, gin.H{"received": true, "message": "Event type not handled"})
+		return
+	}
+}
+
+// handlePaymentIntentSucceeded handles successful payment
+func (h *WebhookHandler) handlePaymentIntentSucceeded(c *gin.Context, event stripe.Event) {
+	log := logger.Get()
+
+	var paymentIntent stripe.PaymentIntent
+	if err := json.Unmarshal(event.Data.Raw, &paymentIntent); err != nil {
+		log.Error(fmt.Sprintf("Failed to parse payment_intent.succeeded: %v", err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse event data"})
+		return
+	}
+
+	paymentID := paymentIntent.Metadata["payment_id"]
+	bookingID := paymentIntent.Metadata["booking_id"]
+
+	log.Info(fmt.Sprintf("Payment succeeded: payment_id=%s, booking_id=%s, amount=%d %s",
+		paymentID, bookingID, paymentIntent.Amount, paymentIntent.Currency))
+
+	// Process the payment if we have payment_id
+	if paymentID != "" {
+		payment, err := h.paymentService.ProcessPayment(c.Request.Context(), paymentID)
+		if err != nil {
+			log.Error(fmt.Sprintf("Failed to process payment %s: %v", paymentID, err))
+			// Still return 200 to acknowledge receipt
+		} else {
+			log.Info(fmt.Sprintf("Payment %s processed successfully, status: %s", paymentID, payment.Status))
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"received": true})
+}
+
+// handlePaymentIntentFailed handles failed payment
+func (h *WebhookHandler) handlePaymentIntentFailed(c *gin.Context, event stripe.Event) {
+	log := logger.Get()
+
+	var paymentIntent stripe.PaymentIntent
+	if err := json.Unmarshal(event.Data.Raw, &paymentIntent); err != nil {
+		log.Error(fmt.Sprintf("Failed to parse payment_intent.payment_failed: %v", err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse event data"})
+		return
+	}
+
+	paymentID := paymentIntent.Metadata["payment_id"]
+	bookingID := paymentIntent.Metadata["booking_id"]
+
+	failureMessage := "Payment failed"
+	if paymentIntent.LastPaymentError != nil {
+		failureMessage = paymentIntent.LastPaymentError.Msg
+	}
+
+	log.Warn(fmt.Sprintf("Payment failed: payment_id=%s, booking_id=%s, reason=%s",
+		paymentID, bookingID, failureMessage))
+
+	// Cancel the payment if we have payment_id
+	if paymentID != "" {
+		_, err := h.paymentService.CancelPayment(c.Request.Context(), paymentID)
+		if err != nil {
+			log.Error(fmt.Sprintf("Failed to cancel payment %s: %v", paymentID, err))
+		}
+	}
+
+	// TODO: Trigger seat release via Kafka event to booking-service
+
+	c.JSON(http.StatusOK, gin.H{"received": true})
+}
+
+// handlePaymentIntentCanceled handles canceled payment
+func (h *WebhookHandler) handlePaymentIntentCanceled(c *gin.Context, event stripe.Event) {
+	log := logger.Get()
+
+	var paymentIntent stripe.PaymentIntent
+	if err := json.Unmarshal(event.Data.Raw, &paymentIntent); err != nil {
+		log.Error(fmt.Sprintf("Failed to parse payment_intent.canceled: %v", err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse event data"})
+		return
+	}
+
+	paymentID := paymentIntent.Metadata["payment_id"]
+	bookingID := paymentIntent.Metadata["booking_id"]
+
+	log.Info(fmt.Sprintf("Payment canceled: payment_id=%s, booking_id=%s", paymentID, bookingID))
+
+	// Cancel the payment if we have payment_id
+	if paymentID != "" {
+		_, err := h.paymentService.CancelPayment(c.Request.Context(), paymentID)
+		if err != nil {
+			log.Error(fmt.Sprintf("Failed to cancel payment %s: %v", paymentID, err))
+		}
+	}
+
+	// TODO: Trigger seat release via Kafka event to booking-service
+
+	c.JSON(http.StatusOK, gin.H{"received": true})
+}
+
+// handleChargeRefunded handles refunded charge
+func (h *WebhookHandler) handleChargeRefunded(c *gin.Context, event stripe.Event) {
+	log := logger.Get()
+
+	var charge stripe.Charge
+	if err := json.Unmarshal(event.Data.Raw, &charge); err != nil {
+		log.Error(fmt.Sprintf("Failed to parse charge.refunded: %v", err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse event data"})
+		return
+	}
+
+	paymentID := charge.Metadata["payment_id"]
+	bookingID := charge.Metadata["booking_id"]
+
+	log.Info(fmt.Sprintf("Charge refunded: payment_id=%s, booking_id=%s, amount_refunded=%d",
+		paymentID, bookingID, charge.AmountRefunded))
+
+	// Refund the payment if we have payment_id
+	if paymentID != "" {
+		_, err := h.paymentService.RefundPayment(c.Request.Context(), paymentID, "stripe_webhook_refund")
+		if err != nil {
+			log.Error(fmt.Sprintf("Failed to refund payment %s: %v", paymentID, err))
+		}
+	}
+
+	// TODO: Trigger seat release via Kafka event to booking-service
+
+	c.JSON(http.StatusOK, gin.H{"received": true})
+}

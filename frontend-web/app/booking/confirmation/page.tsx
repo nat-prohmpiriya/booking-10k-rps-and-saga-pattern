@@ -1,30 +1,147 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Check, Download, Wallet, Calendar, MapPin, Ticket } from "lucide-react"
+import { useSearchParams } from "next/navigation"
+import { Check, Download, Wallet, Calendar, MapPin, Ticket, AlertTriangle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import Link from "next/link"
+import { bookingApi } from "@/lib/api/booking"
+import { eventsApi } from "@/lib/api/events"
+import type { BookingResponse, EventResponse, ShowResponse, ShowZoneResponse } from "@/lib/api/types"
+
+interface BookingDetails {
+  booking: BookingResponse
+  event: EventResponse | null
+  show: ShowResponse | null
+  zone: ShowZoneResponse | null
+}
 
 export default function BookingConfirmationPage() {
+  const searchParams = useSearchParams()
+  const bookingId = searchParams.get("booking_id")
+
   const [showSuccess, setShowSuccess] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [bookingDetails, setBookingDetails] = useState<BookingDetails | null>(null)
 
   useEffect(() => {
-    // Trigger success animation on mount
-    setShowSuccess(true)
-  }, [])
+    if (!bookingId) {
+      setError("No booking ID provided")
+      setLoading(false)
+      return
+    }
 
-  // Sample booking data
-  const booking = {
-    reference: "BK-2025-7X9M4",
-    eventName: "Exclusive Gala Night 2025",
-    date: "Saturday, March 15, 2025",
-    time: "7:30 PM",
-    venue: "Grand Ballroom",
-    address: "Crystal Palace Hotel, Bangkok",
-    zone: "VIP Premium Zone A",
-    seat: "Row 5, Seat 12-13",
+    const fetchBookingDetails = async () => {
+      try {
+        // Fetch booking
+        const booking = await bookingApi.getBooking(bookingId)
+
+        // Fetch event details
+        let event: EventResponse | null = null
+        let show: ShowResponse | null = null
+        let zone: ShowZoneResponse | null = null
+
+        if (booking.event_id) {
+          try {
+            event = await eventsApi.getEvent(booking.event_id)
+          } catch (err) {
+            console.error("Failed to fetch event:", err)
+          }
+        }
+
+        // Try to get show and zone info if available
+        if (event?.slug) {
+          try {
+            const shows = await eventsApi.getEventShowsBySlug(event.slug)
+            // Find matching show (simplified - in real app might need show_id in booking)
+            if (shows.length > 0) {
+              show = shows[0]
+              if (booking.zone_id) {
+                const zones = await eventsApi.getShowZones(show.id)
+                zone = zones.find((z: ShowZoneResponse) => z.id === booking.zone_id) || null
+              }
+            }
+          } catch (err) {
+            console.error("Failed to fetch show/zone:", err)
+          }
+        }
+
+        setBookingDetails({ booking, event, show, zone })
+        setLoading(false)
+
+        // Trigger success animation
+        setTimeout(() => setShowSuccess(true), 100)
+      } catch (err) {
+        console.error("Failed to fetch booking:", err)
+        setError("Failed to load booking details")
+        setLoading(false)
+      }
+    }
+
+    fetchBookingDetails()
+  }, [bookingId])
+
+  // Generate booking reference from ID
+  const generateReference = (id: string) => {
+    const shortId = id.split("-")[0]?.toUpperCase() || id.slice(0, 8).toUpperCase()
+    return `BK-${new Date().getFullYear()}-${shortId}`
   }
+
+  // Format date
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    })
+  }
+
+  // Format time
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin text-[#d4af37] mx-auto" />
+          <p className="text-zinc-400">Loading your booking...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error || !bookingDetails) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center p-4">
+        <Card className="bg-zinc-900/50 border-red-800 p-8 max-w-md text-center">
+          <div className="w-16 h-16 rounded-full border-2 border-red-500 flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="w-8 h-8 text-red-500" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2">Booking Not Found</h1>
+          <p className="text-zinc-400 mb-6">{error || "Unable to load booking details"}</p>
+          <Link href="/">
+            <Button className="bg-[#d4af37] hover:bg-[#c19d2f] text-[#0a0a0a]">Back to Home</Button>
+          </Link>
+        </Card>
+      </div>
+    )
+  }
+
+  const { booking, event, show, zone } = bookingDetails
+  const reference = generateReference(booking.id)
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center p-4">
@@ -47,7 +164,7 @@ export default function BookingConfirmationPage() {
 
           <div className="text-center space-y-2">
             <h1 className="text-4xl md:text-5xl font-bold text-balance">Booking Confirmed!</h1>
-            <p className="text-lg text-zinc-400">{"Your tickets have been sent to your email"}</p>
+            <p className="text-lg text-zinc-400">Your tickets have been sent to your email</p>
           </div>
         </div>
 
@@ -58,11 +175,10 @@ export default function BookingConfirmationPage() {
             <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
               <div className="shrink-0">
                 <div className="w-32 h-32 bg-white rounded-lg p-2 shadow-lg shadow-[#d4af37]/20">
-                  {/* QR Code placeholder */}
+                  {/* QR Code - could use a real QR library here */}
                   <svg viewBox="0 0 100 100" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
                     <rect width="100" height="100" fill="white" />
                     <g fill="black">
-                      {/* QR code pattern simulation */}
                       <rect x="10" y="10" width="30" height="30" />
                       <rect x="60" y="10" width="30" height="30" />
                       <rect x="10" y="60" width="30" height="30" />
@@ -72,7 +188,6 @@ export default function BookingConfirmationPage() {
                       <rect x="20" y="20" width="10" height="10" />
                       <rect x="70" y="20" width="10" height="10" />
                       <rect x="20" y="70" width="10" height="10" />
-                      {/* Random pattern squares */}
                       <rect x="50" y="20" width="5" height="5" />
                       <rect x="45" y="25" width="5" height="5" />
                       <rect x="55" y="30" width="5" height="5" />
@@ -95,12 +210,12 @@ export default function BookingConfirmationPage() {
                 {/* Booking Reference */}
                 <div>
                   <p className="text-sm text-zinc-500 uppercase tracking-wider">Booking Reference</p>
-                  <p className="text-2xl font-bold text-[#d4af37] font-mono tracking-wide">{booking.reference}</p>
+                  <p className="text-2xl font-bold text-[#d4af37] font-mono tracking-wide">{reference}</p>
                 </div>
 
                 {/* Event Name */}
                 <div>
-                  <h2 className="text-2xl font-semibold text-balance">{booking.eventName}</h2>
+                  <h2 className="text-2xl font-semibold text-balance">{event?.name || "Event"}</h2>
                 </div>
               </div>
             </div>
@@ -119,8 +234,12 @@ export default function BookingConfirmationPage() {
                 </div>
                 <div>
                   <p className="text-sm text-zinc-500">Date & Time</p>
-                  <p className="font-medium">{booking.date}</p>
-                  <p className="text-sm text-zinc-400">{booking.time}</p>
+                  <p className="font-medium">
+                    {show?.show_date ? formatDate(show.show_date) : "Date TBA"}
+                  </p>
+                  <p className="text-sm text-zinc-400">
+                    {show?.start_time ? formatTime(show.start_time) : "Time TBA"}
+                  </p>
                 </div>
               </div>
 
@@ -133,8 +252,8 @@ export default function BookingConfirmationPage() {
                 </div>
                 <div>
                   <p className="text-sm text-zinc-500">Venue</p>
-                  <p className="font-medium">{booking.venue}</p>
-                  <p className="text-sm text-zinc-400">{booking.address}</p>
+                  <p className="font-medium">{event?.venue_name || "Venue TBA"}</p>
+                  <p className="text-sm text-zinc-400">{event?.venue_address || ""}</p>
                 </div>
               </div>
 
@@ -147,11 +266,11 @@ export default function BookingConfirmationPage() {
                 </div>
                 <div>
                   <p className="text-sm text-zinc-500">Zone</p>
-                  <p className="font-medium">{booking.zone}</p>
+                  <p className="font-medium">{zone?.name || "General Admission"}</p>
                 </div>
               </div>
 
-              {/* Seat */}
+              {/* Quantity & Price */}
               <div className="flex gap-3">
                 <div className="shrink-0">
                   <div className="w-10 h-10 rounded-lg bg-[#d4af37]/10 flex items-center justify-center">
@@ -159,8 +278,9 @@ export default function BookingConfirmationPage() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm text-zinc-500">Seat</p>
-                  <p className="font-medium">{booking.seat}</p>
+                  <p className="text-sm text-zinc-500">Tickets</p>
+                  <p className="font-medium">{booking.quantity} ticket(s)</p>
+                  <p className="text-sm text-zinc-400">Total: ฿{booking.total_price.toLocaleString()}</p>
                 </div>
               </div>
             </div>
@@ -180,7 +300,6 @@ export default function BookingConfirmationPage() {
                   xmlns="http://www.w3.org/2000/svg"
                 >
                   <rect width="280" height="60" fill="white" rx="4" />
-                  {/* Barcode pattern */}
                   <g fill="black">
                     <rect x="10" y="10" width="3" height="40" />
                     <rect x="16" y="10" width="2" height="40" />
@@ -228,7 +347,7 @@ export default function BookingConfirmationPage() {
                   </g>
                 </svg>
               </div>
-              <p className="text-xs text-zinc-500 text-center font-mono">{booking.reference}</p>
+              <p className="text-xs text-zinc-500 text-center font-mono">{reference}</p>
             </div>
           </div>
         </Card>
@@ -250,15 +369,22 @@ export default function BookingConfirmationPage() {
         </div>
 
         {/* View My Bookings Link */}
-        <div className="text-center">
+        <div className="text-center space-y-2">
           <Link
-            href="/"
+            href="/my-bookings"
             className="text-[#d4af37] hover:text-[#c19d2f] font-medium inline-flex items-center gap-2 transition-colors"
           >
-            Back to Home
+            View My Bookings
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
+          </Link>
+          <br />
+          <Link
+            href="/"
+            className="text-zinc-400 hover:text-zinc-300 text-sm inline-flex items-center gap-2 transition-colors"
+          >
+            Back to Home
           </Link>
         </div>
       </div>
