@@ -470,6 +470,18 @@ func ConfigFromEnv(authURL, ticketURL, bookingURL, paymentURL, jwtSecret string)
 				},
 				RequireAuth: true,
 			},
+			// Stripe Webhooks - public (uses Stripe signature verification)
+			{
+				PathPrefix:  "/api/v1/webhooks",
+				StripPrefix: "",
+				Service: ServiceConfig{
+					Name:    "payment-service",
+					BaseURL: paymentURL,
+					Timeout: 30 * time.Second,
+				},
+				RequireAuth:    false,
+				AllowedMethods: []string{"POST"},
+			},
 			// User profile - protected
 			{
 				PathPrefix:  "/api/v1/users",
