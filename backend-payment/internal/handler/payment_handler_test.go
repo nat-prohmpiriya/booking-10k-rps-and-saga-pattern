@@ -171,6 +171,20 @@ func (m *mockPaymentGateway) CreatePortalSession(ctx context.Context, req *gatew
 	}, nil
 }
 
+func (m *mockPaymentGateway) ListPaymentMethods(ctx context.Context, customerID string) ([]*gateway.PaymentMethodInfo, error) {
+	return []*gateway.PaymentMethodInfo{
+		{
+			ID:        "pm_mock_visa",
+			Type:      "card",
+			Brand:     "visa",
+			Last4:     "4242",
+			ExpMonth:  12,
+			ExpYear:   2025,
+			IsDefault: true,
+		},
+	}, nil
+}
+
 func (m *mockPaymentGateway) Name() string {
 	return "mock"
 }
