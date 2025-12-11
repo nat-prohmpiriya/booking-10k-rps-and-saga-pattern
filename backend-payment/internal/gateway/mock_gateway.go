@@ -189,3 +189,84 @@ func (g *MockGateway) GetSuccessRate() float64 {
 	defer g.mu.RUnlock()
 	return g.config.SuccessRate
 }
+
+// CreatePaymentIntent creates a mock PaymentIntent
+func (g *MockGateway) CreatePaymentIntent(ctx context.Context, req *PaymentIntentRequest) (*PaymentIntentResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("payment intent request is required")
+	}
+
+	// Simulate processing delay
+	if g.config.DelayMs > 0 {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Duration(g.config.DelayMs) * time.Millisecond):
+		}
+	}
+
+	// Generate mock IDs
+	paymentIntentID := fmt.Sprintf("pi_mock_%s", uuid.New().String()[:12])
+	clientSecret := fmt.Sprintf("%s_secret_%s", paymentIntentID, uuid.New().String()[:8])
+
+	// Store mock payment intent
+	g.transactions.Store(paymentIntentID, &TransactionInfo{
+		TransactionID: paymentIntentID,
+		Status:        "requires_payment_method",
+		Amount:        req.Amount,
+		Currency:      req.Currency,
+		CreatedAt:     time.Now().Format(time.RFC3339),
+		Metadata:      req.Metadata,
+	})
+
+	return &PaymentIntentResponse{
+		PaymentIntentID: paymentIntentID,
+		ClientSecret:    clientSecret,
+		Status:          "requires_payment_method",
+		Amount:          req.Amount,
+		Currency:        req.Currency,
+	}, nil
+}
+
+// ConfirmPaymentIntent confirms a mock PaymentIntent
+func (g *MockGateway) ConfirmPaymentIntent(ctx context.Context, paymentIntentID string) (*PaymentIntentResponse, error) {
+	if paymentIntentID == "" {
+		return nil, fmt.Errorf("payment intent ID is required")
+	}
+
+	// Simulate processing delay
+	if g.config.DelayMs > 0 {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Duration(g.config.DelayMs) * time.Millisecond):
+		}
+	}
+
+	// Get the payment intent
+	txn, ok := g.transactions.Load(paymentIntentID)
+	if !ok {
+		return nil, fmt.Errorf("payment intent not found: %s", paymentIntentID)
+	}
+
+	info := txn.(*TransactionInfo)
+
+	// Determine success or failure
+	success := rand.Float64() < g.config.SuccessRate
+
+	if success {
+		info.Status = "succeeded"
+	} else {
+		info.Status = "failed"
+	}
+
+	g.transactions.Store(paymentIntentID, info)
+
+	return &PaymentIntentResponse{
+		PaymentIntentID: paymentIntentID,
+		ClientSecret:    "",
+		Status:          info.Status,
+		Amount:          info.Amount,
+		Currency:        info.Currency,
+	}, nil
+}

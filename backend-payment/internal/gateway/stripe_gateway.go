@@ -163,3 +163,76 @@ func (g *StripeGateway) GetTransaction(ctx context.Context, transactionID string
 func (g *StripeGateway) Name() string {
 	return "stripe"
 }
+
+// CreatePaymentIntent creates a Stripe PaymentIntent and returns client_secret
+func (g *StripeGateway) CreatePaymentIntent(ctx context.Context, req *PaymentIntentRequest) (*PaymentIntentResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("payment intent request is required")
+	}
+
+	// Convert amount to smallest currency unit (satang for THB, cents for USD)
+	amountInSmallestUnit := int64(req.Amount)
+	if req.Currency == "THB" || req.Currency == "thb" {
+		// THB uses satang (1 THB = 100 satang), amount is already in satang
+		amountInSmallestUnit = int64(req.Amount)
+	} else {
+		// For other currencies like USD, convert to cents
+		amountInSmallestUnit = int64(req.Amount * 100)
+	}
+
+	// Build payment intent params
+	params := &stripe.PaymentIntentParams{
+		Amount:   stripe.Int64(amountInSmallestUnit),
+		Currency: stripe.String(req.Currency),
+		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
+			Enabled: stripe.Bool(true),
+		},
+		Metadata: make(map[string]string),
+	}
+
+	// Add metadata
+	params.Metadata["payment_id"] = req.PaymentID
+	for k, v := range req.Metadata {
+		params.Metadata[k] = v
+	}
+
+	// Add description if provided
+	if req.Description != "" {
+		params.Description = stripe.String(req.Description)
+	}
+
+	// Create payment intent
+	pi, err := paymentintent.New(params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create payment intent: %w", err)
+	}
+
+	return &PaymentIntentResponse{
+		PaymentIntentID: pi.ID,
+		ClientSecret:    pi.ClientSecret,
+		Status:          string(pi.Status),
+		Amount:          req.Amount,
+		Currency:        req.Currency,
+	}, nil
+}
+
+// ConfirmPaymentIntent confirms a PaymentIntent after client-side completion
+func (g *StripeGateway) ConfirmPaymentIntent(ctx context.Context, paymentIntentID string) (*PaymentIntentResponse, error) {
+	if paymentIntentID == "" {
+		return nil, fmt.Errorf("payment intent ID is required")
+	}
+
+	// Get the payment intent to check its status
+	pi, err := paymentintent.Get(paymentIntentID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get payment intent: %w", err)
+	}
+
+	return &PaymentIntentResponse{
+		PaymentIntentID: pi.ID,
+		ClientSecret:    pi.ClientSecret,
+		Status:          string(pi.Status),
+		Amount:          float64(pi.Amount),
+		Currency:        string(pi.Currency),
+	}, nil
+}

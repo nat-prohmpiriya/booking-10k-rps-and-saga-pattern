@@ -72,3 +72,26 @@ type PaymentListResponse struct {
 	Payments []*PaymentResponse `json:"payments"`
 	Total    int                `json:"total"`
 }
+
+// CreatePaymentIntentRequest represents a request to create a Stripe PaymentIntent
+type CreatePaymentIntentRequest struct {
+	BookingID string  `json:"booking_id" binding:"required"`
+	Amount    float64 `json:"amount" binding:"required,gt=0"`
+	Currency  string  `json:"currency"`
+}
+
+// PaymentIntentResponse represents a Stripe PaymentIntent response
+type PaymentIntentResponse struct {
+	PaymentID       string  `json:"payment_id"`
+	ClientSecret    string  `json:"client_secret"`
+	PaymentIntentID string  `json:"payment_intent_id"`
+	Amount          float64 `json:"amount"`
+	Currency        string  `json:"currency"`
+	Status          string  `json:"status"`
+}
+
+// ConfirmPaymentRequest represents a request to confirm payment after Stripe completion
+type ConfirmPaymentRequest struct {
+	PaymentID       string `json:"payment_id" binding:"required"`
+	PaymentIntentID string `json:"payment_intent_id" binding:"required"`
+}

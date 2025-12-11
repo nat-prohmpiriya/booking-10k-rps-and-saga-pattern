@@ -15,6 +15,12 @@ type PaymentGateway interface {
 	// GetTransaction retrieves transaction details
 	GetTransaction(ctx context.Context, transactionID string) (*TransactionInfo, error)
 
+	// CreatePaymentIntent creates a Stripe PaymentIntent and returns client_secret
+	CreatePaymentIntent(ctx context.Context, req *PaymentIntentRequest) (*PaymentIntentResponse, error)
+
+	// ConfirmPaymentIntent confirms a PaymentIntent after client-side completion
+	ConfirmPaymentIntent(ctx context.Context, paymentIntentID string) (*PaymentIntentResponse, error)
+
 	// Name returns the gateway name
 	Name() string
 }
@@ -59,8 +65,27 @@ type TransactionInfo struct {
 
 // GatewayConfig holds common gateway configuration
 type GatewayConfig struct {
-	APIKey       string
-	SecretKey    string
+	APIKey        string
+	SecretKey     string
 	WebhookSecret string
-	Environment  string // "test" or "live"
+	Environment   string // "test" or "live"
+}
+
+// PaymentIntentRequest represents a request to create a PaymentIntent
+type PaymentIntentRequest struct {
+	PaymentID     string
+	Amount        float64
+	Currency      string
+	Description   string
+	Metadata      map[string]string
+	CustomerEmail string
+}
+
+// PaymentIntentResponse represents a PaymentIntent response
+type PaymentIntentResponse struct {
+	PaymentIntentID string
+	ClientSecret    string
+	Status          string
+	Amount          float64
+	Currency        string
 }

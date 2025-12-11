@@ -3,18 +3,18 @@
 import { useState, useEffect, useCallback } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Separator } from "@/components/ui/separator"
-import { CreditCard, Smartphone, Clock, Shield, Lock, Calendar, MapPin, Ticket, AlertTriangle } from "lucide-react"
+import { Clock, Shield, Lock, Calendar, MapPin, Ticket, AlertTriangle, CreditCard } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { bookingApi, paymentApi } from "@/lib/api/booking"
 import { eventsApi } from "@/lib/api/events"
-import type { EventResponse, ShowResponse, ShowZoneResponse, ReserveSeatsResponse } from "@/lib/api/types"
+import type { EventResponse, ShowResponse, ShowZoneResponse, ReserveSeatsResponse, PaymentIntentResponse } from "@/lib/api/types"
 import { ApiRequestError } from "@/lib/api/client"
+import { getStripe, isStripeConfigured } from "@/lib/stripe"
+import { StripePaymentForm } from "@/components/payment/stripe-payment-form"
+import type { Stripe } from "@stripe/stripe-js"
 
-type CheckoutState = "loading" | "reserving" | "ready" | "processing" | "success" | "error" | "timeout"
+type CheckoutState = "loading" | "reserving" | "creating_intent" | "ready" | "processing" | "success" | "error" | "timeout"
 
 interface QueueData {
   eventId: string
@@ -41,16 +41,19 @@ export default function CheckoutPage() {
   const [reservation, setReservation] = useState<ReserveSeatsResponse | null>(null)
   const [error, setError] = useState<string>("")
 
+  // Stripe state
+  const [stripe, setStripe] = useState<Stripe | null>(null)
+  const [paymentIntent, setPaymentIntent] = useState<PaymentIntentResponse | null>(null)
+
   // Timer state
   const [timeLeft, setTimeLeft] = useState(600) // 10 minutes default
 
-  // Payment form
-  const [paymentMethod, setPaymentMethod] = useState("card")
-  const [cardNumber, setCardNumber] = useState("")
-  const [cardExpiry, setCardExpiry] = useState("")
-  const [cardCvv, setCardCvv] = useState("")
-  const [cardName, setCardName] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  // Initialize Stripe
+  useEffect(() => {
+    if (isStripeConfigured()) {
+      getStripe().then(setStripe)
+    }
+  }, [])
 
   // Load queue data from sessionStorage
   useEffect(() => {
@@ -159,7 +162,7 @@ export default function CheckoutPage() {
           setTimeLeft(remaining)
         }
 
-        setCheckoutState("ready")
+        setCheckoutState("creating_intent")
       } catch (err) {
         console.error("Failed to reserve seats:", err)
         if (err instanceof ApiRequestError) {
@@ -179,6 +182,36 @@ export default function CheckoutPage() {
 
     reserveSeats()
   }, [checkoutState, queueData, event, zones])
+
+  // Create PaymentIntent after reservation
+  useEffect(() => {
+    if (checkoutState !== "creating_intent" || !reservation) return
+
+    const createPaymentIntent = async () => {
+      try {
+        const orderSummary = getOrderSummary()
+
+        const intentData = await paymentApi.createPaymentIntent({
+          booking_id: reservation.booking_id,
+          amount: orderSummary.total,
+          currency: "THB",
+        })
+
+        setPaymentIntent(intentData)
+        setCheckoutState("ready")
+      } catch (err) {
+        console.error("Failed to create payment intent:", err)
+        if (err instanceof ApiRequestError) {
+          setError(err.message)
+        } else {
+          setError("Failed to initialize payment. Please try again.")
+        }
+        setCheckoutState("error")
+      }
+    }
+
+    createPaymentIntent()
+  }, [checkoutState, reservation])
 
   // Countdown timer
   useEffect(() => {
@@ -268,23 +301,22 @@ export default function CheckoutPage() {
 
   const orderSummary = getOrderSummary()
 
-  // Handle payment submission
-  const handlePayment = async () => {
-    if (!reservation?.booking_id) return
+  // Handle successful Stripe payment
+  const handlePaymentSuccess = async (paymentIntentId: string) => {
+    if (!reservation?.booking_id || !paymentIntent?.payment_id) return
 
-    setIsSubmitting(true)
+    setCheckoutState("processing")
 
     try {
-      // Create payment (mock)
-      const payment = await paymentApi.createPayment({
-        booking_id: reservation.booking_id,
-        payment_method: paymentMethod,
-        amount: orderSummary.total,
+      // Confirm payment on backend
+      await paymentApi.confirmPaymentIntent({
+        payment_id: paymentIntent.payment_id,
+        payment_intent_id: paymentIntentId,
       })
 
-      // Confirm booking with payment
+      // Confirm booking
       await bookingApi.confirmBooking(reservation.booking_id, {
-        payment_id: payment.id,
+        payment_id: paymentIntent.payment_id,
       })
 
       setCheckoutState("success")
@@ -296,15 +328,19 @@ export default function CheckoutPage() {
         router.push(`/booking/confirmation?booking_id=${reservation.booking_id}`)
       }, 2000)
     } catch (err) {
-      console.error("Payment failed:", err)
+      console.error("Failed to confirm payment:", err)
       if (err instanceof ApiRequestError) {
         setError(err.message)
       } else {
-        setError("Payment failed. Please try again.")
+        setError("Payment completed but confirmation failed. Please contact support.")
       }
-    } finally {
-      setIsSubmitting(false)
+      setCheckoutState("error")
     }
+  }
+
+  // Handle payment error
+  const handlePaymentError = (errorMessage: string) => {
+    setError(errorMessage)
   }
 
   // Handle cancel
@@ -322,13 +358,15 @@ export default function CheckoutPage() {
   }
 
   // Loading state
-  if (checkoutState === "loading" || checkoutState === "reserving") {
+  if (checkoutState === "loading" || checkoutState === "reserving" || checkoutState === "creating_intent") {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="w-16 h-16 border-4 border-[#d4af37]/30 border-t-[#d4af37] rounded-full animate-spin mx-auto" />
           <p className="text-gray-400">
-            {checkoutState === "loading" ? "Loading checkout..." : "Reserving your seats..."}
+            {checkoutState === "loading" && "Loading checkout..."}
+            {checkoutState === "reserving" && "Reserving your seats..."}
+            {checkoutState === "creating_intent" && "Initializing payment..."}
           </p>
         </div>
       </div>
@@ -383,6 +421,18 @@ export default function CheckoutPage() {
           <h1 className="text-2xl font-bold text-white mb-2">Payment Successful!</h1>
           <p className="text-gray-400 mb-6">Redirecting to your booking confirmation...</p>
         </Card>
+      </div>
+    )
+  }
+
+  // Processing state
+  if (checkoutState === "processing") {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-4 border-[#d4af37]/30 border-t-[#d4af37] rounded-full animate-spin mx-auto" />
+          <p className="text-gray-400">Confirming your payment...</p>
+        </div>
       </div>
     )
   }
@@ -507,106 +557,35 @@ export default function CheckoutPage() {
 
                 <h2 className="mb-6 text-xl font-semibold text-white">Payment Details</h2>
 
-                {/* Payment Method Selector */}
-                <div className="mb-6">
-                  <Label className="mb-3 block text-sm font-medium text-gray-300">Payment Method</Label>
-                  <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
-                    <div
-                      className={`flex items-center space-x-3 rounded-lg border p-4 cursor-pointer ${
-                        paymentMethod === "card" ? "border-[#d4af37] bg-[#1a1a1a]" : "border-[#2a2a2a]"
-                      }`}
-                      onClick={() => setPaymentMethod("card")}
-                    >
-                      <RadioGroupItem value="card" id="card" />
-                      <CreditCard className="h-5 w-5 text-gray-400" />
-                      <Label htmlFor="card" className="flex-1 cursor-pointer text-white">
-                        Credit / Debit Card
-                      </Label>
-                    </div>
-
-                    <div
-                      className={`mt-3 flex items-center space-x-3 rounded-lg border p-4 cursor-pointer ${
-                        paymentMethod === "promptpay" ? "border-[#d4af37] bg-[#1a1a1a]" : "border-[#2a2a2a]"
-                      }`}
-                      onClick={() => setPaymentMethod("promptpay")}
-                    >
-                      <RadioGroupItem value="promptpay" id="promptpay" />
-                      <Smartphone className="h-5 w-5 text-gray-400" />
-                      <Label htmlFor="promptpay" className="flex-1 cursor-pointer text-white">
-                        PromptPay
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-
-                {/* Payment Form */}
-                {paymentMethod === "card" && (
+                {/* Stripe Payment Form or Fallback */}
+                {stripe && paymentIntent?.client_secret ? (
+                  <StripePaymentForm
+                    stripe={stripe}
+                    clientSecret={paymentIntent.client_secret}
+                    amount={orderSummary.total}
+                    onSuccess={handlePaymentSuccess}
+                    onError={handlePaymentError}
+                    disabled={timeLeft <= 0}
+                  />
+                ) : (
                   <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="cardNumber" className="text-gray-300">
-                        Card Number
-                      </Label>
-                      <Input
-                        id="cardNumber"
-                        placeholder="1234 5678 9012 3456"
-                        value={cardNumber}
-                        onChange={(e) => setCardNumber(e.target.value)}
-                        className="mt-1.5 border-gray-700 bg-black/30 text-white placeholder:text-gray-500"
-                        maxLength={19}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2 rounded-lg border border-yellow-800 bg-yellow-950/50 p-4 text-sm text-yellow-400">
+                      <AlertTriangle className="h-5 w-5 shrink-0" />
                       <div>
-                        <Label htmlFor="expiry" className="text-gray-300">
-                          Expiry Date
-                        </Label>
-                        <Input
-                          id="expiry"
-                          placeholder="MM / YY"
-                          value={cardExpiry}
-                          onChange={(e) => setCardExpiry(e.target.value)}
-                          className="mt-1.5 border-gray-700 bg-black/30 text-white placeholder:text-gray-500"
-                          maxLength={7}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="cvv" className="text-gray-300">
-                          CVV
-                        </Label>
-                        <Input
-                          id="cvv"
-                          placeholder="123"
-                          type="password"
-                          value={cardCvv}
-                          onChange={(e) => setCardCvv(e.target.value)}
-                          className="mt-1.5 border-gray-700 bg-black/30 text-white placeholder:text-gray-500"
-                          maxLength={4}
-                        />
+                        <p className="font-semibold">Stripe not configured</p>
+                        <p className="text-yellow-400/80">
+                          Please set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY environment variable to enable payments.
+                        </p>
                       </div>
                     </div>
 
-                    <div>
-                      <Label htmlFor="cardName" className="text-gray-300">
-                        Cardholder Name
-                      </Label>
-                      <Input
-                        id="cardName"
-                        placeholder="JOHN DOE"
-                        value={cardName}
-                        onChange={(e) => setCardName(e.target.value)}
-                        className="mt-1.5 border-gray-700 bg-black/30 text-white placeholder:text-gray-500"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {paymentMethod === "promptpay" && (
-                  <div className="rounded-lg bg-gray-800/50 p-6 text-center">
-                    <Smartphone className="mx-auto mb-3 h-12 w-12 text-gray-400" />
-                    <p className="text-sm text-gray-300">
-                      You will receive a PromptPay QR code after clicking the pay button
-                    </p>
+                    <Button
+                      disabled
+                      className="w-full py-6 text-lg font-semibold bg-gray-700 text-gray-400 cursor-not-allowed"
+                    >
+                      <CreditCard className="mr-2 h-5 w-5" />
+                      Payment Unavailable
+                    </Button>
                   </div>
                 )}
 
@@ -616,15 +595,6 @@ export default function CheckoutPage() {
                     <p className="text-sm text-red-400">{error}</p>
                   </div>
                 )}
-
-                {/* Pay Button */}
-                <Button
-                  onClick={handlePayment}
-                  disabled={isSubmitting || timeLeft <= 0}
-                  className="mt-6 w-full py-6 text-lg font-semibold bg-[#d4af37] hover:bg-[#d4af37]/90 text-[#0a0a0a] disabled:opacity-50"
-                >
-                  {isSubmitting ? "Processing..." : `Pay ฿${orderSummary.total.toLocaleString()}`}
-                </Button>
 
                 {/* Cancel Button */}
                 <Button
@@ -652,7 +622,7 @@ export default function CheckoutPage() {
                 </div>
 
                 <p className="mt-4 text-center text-xs text-gray-500">
-                  Your payment information is processed securely. We do not store credit card details.
+                  Your payment information is processed securely by Stripe. We never store your card details.
                 </p>
               </div>
             </Card>

@@ -53,7 +53,7 @@ func NewContainer(cfg *ContainerConfig) *Container {
 	// Initialize PaymentService if repository and gateway are provided
 	if c.PaymentRepo != nil && c.PaymentGateway != nil {
 		c.PaymentService = service.NewPaymentService(c.PaymentRepo, c.PaymentGateway, cfg.ServiceConfig)
-		c.PaymentHandler = handler.NewPaymentHandler(c.PaymentService)
+		c.PaymentHandler = handler.NewPaymentHandler(c.PaymentService, c.PaymentGateway)
 	}
 
 	return c

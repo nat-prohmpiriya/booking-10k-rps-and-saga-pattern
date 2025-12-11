@@ -8,18 +8,21 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-payment/internal/domain"
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-payment/internal/dto"
+	"github.com/prohmpiriya/booking-rush-10k-rps/backend-payment/internal/gateway"
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-payment/internal/service"
 )
 
 // PaymentHandler handles payment HTTP endpoints
 type PaymentHandler struct {
 	paymentService service.PaymentService
+	paymentGateway gateway.PaymentGateway
 }
 
 // NewPaymentHandler creates a new PaymentHandler
-func NewPaymentHandler(paymentService service.PaymentService) *PaymentHandler {
+func NewPaymentHandler(paymentService service.PaymentService, paymentGateway gateway.PaymentGateway) *PaymentHandler {
 	return &PaymentHandler{
 		paymentService: paymentService,
+		paymentGateway: paymentGateway,
 	}
 }
 
@@ -250,4 +253,128 @@ func (h *PaymentHandler) CancelPayment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, dto.NewSuccessResponse(dto.FromPayment(payment)))
+}
+
+// CreatePaymentIntent handles POST /payments/intent
+// Creates a Stripe PaymentIntent and returns client_secret for frontend
+func (h *PaymentHandler) CreatePaymentIntent(c *gin.Context) {
+	var req dto.CreatePaymentIntentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, dto.NewErrorResponse("VALIDATION_ERROR", err.Error()))
+		return
+	}
+
+	// Get user ID from context
+	userID := c.GetHeader("X-User-ID")
+	if userID == "" {
+		userID = c.GetString("user_id")
+	}
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, dto.NewErrorResponse("UNAUTHORIZED", "user_id is required"))
+		return
+	}
+
+	// Set default currency
+	currency := req.Currency
+	if currency == "" {
+		currency = "THB"
+	}
+
+	// Create payment record first
+	svcReq := &service.CreatePaymentRequest{
+		BookingID: req.BookingID,
+		UserID:    userID,
+		Amount:    req.Amount,
+		Currency:  currency,
+		Method:    domain.PaymentMethodCreditCard,
+	}
+
+	payment, err := h.paymentService.CreatePayment(c.Request.Context(), svcReq)
+	if err != nil {
+		if errors.Is(err, domain.ErrPaymentAlreadyExists) {
+			// If payment already exists, get it and create new intent
+			payment, err = h.paymentService.GetPaymentByBookingID(c.Request.Context(), req.BookingID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, dto.NewErrorResponse("GET_PAYMENT_FAILED", err.Error()))
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, dto.NewErrorResponse("CREATE_FAILED", err.Error()))
+			return
+		}
+	}
+
+	// Create PaymentIntent via gateway
+	intentReq := &gateway.PaymentIntentRequest{
+		PaymentID:   payment.ID,
+		Amount:      req.Amount,
+		Currency:    currency,
+		Description: "Booking payment for " + req.BookingID,
+		Metadata: map[string]string{
+			"booking_id": req.BookingID,
+			"user_id":    userID,
+			"payment_id": payment.ID,
+		},
+	}
+
+	intentResp, err := h.paymentGateway.CreatePaymentIntent(c.Request.Context(), intentReq)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.NewErrorResponse("PAYMENT_INTENT_FAILED", err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.NewSuccessResponse(&dto.PaymentIntentResponse{
+		PaymentID:       payment.ID,
+		ClientSecret:    intentResp.ClientSecret,
+		PaymentIntentID: intentResp.PaymentIntentID,
+		Amount:          req.Amount,
+		Currency:        currency,
+		Status:          intentResp.Status,
+	}))
+}
+
+// ConfirmPaymentIntent handles POST /payments/intent/confirm
+// Confirms payment after Stripe client-side completion
+func (h *PaymentHandler) ConfirmPaymentIntent(c *gin.Context) {
+	var req dto.ConfirmPaymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, dto.NewErrorResponse("VALIDATION_ERROR", err.Error()))
+		return
+	}
+
+	// Verify PaymentIntent status with Stripe
+	intentResp, err := h.paymentGateway.ConfirmPaymentIntent(c.Request.Context(), req.PaymentIntentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.NewErrorResponse("CONFIRM_FAILED", err.Error()))
+		return
+	}
+
+	// Get the payment
+	payment, err := h.paymentService.GetPayment(c.Request.Context(), req.PaymentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, dto.NewErrorResponse("NOT_FOUND", "payment not found"))
+		return
+	}
+
+	// If Stripe says succeeded, process our payment
+	if intentResp.Status == "succeeded" {
+		payment, err = h.paymentService.ProcessPayment(c.Request.Context(), req.PaymentID)
+		if err != nil {
+			// Try to complete directly if already processing
+			c.JSON(http.StatusOK, dto.NewSuccessResponse(map[string]interface{}{
+				"payment_id":        payment.ID,
+				"status":            payment.Status,
+				"payment_intent_id": req.PaymentIntentID,
+				"stripe_status":     intentResp.Status,
+			}))
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, dto.NewSuccessResponse(map[string]interface{}{
+		"payment_id":        payment.ID,
+		"status":            payment.Status,
+		"payment_intent_id": req.PaymentIntentID,
+		"stripe_status":     intentResp.Status,
+	}))
 }

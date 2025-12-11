@@ -7,6 +7,9 @@ import type {
   BookingResponse,
   CreatePaymentRequest,
   PaymentResponse,
+  CreatePaymentIntentRequest,
+  PaymentIntentResponse,
+  ConfirmPaymentIntentRequest,
   JoinQueueRequest,
   JoinQueueResponse,
   QueuePositionResponse,
@@ -48,6 +51,15 @@ export const paymentApi = {
 
   async getPayment(paymentId: string): Promise<PaymentResponse> {
     return apiClient.get<PaymentResponse>(`/payments/${paymentId}`, { requireAuth: true })
+  },
+
+  // Stripe PaymentIntent APIs
+  async createPaymentIntent(data: CreatePaymentIntentRequest): Promise<PaymentIntentResponse> {
+    return apiClient.post<PaymentIntentResponse>("/payments/intent", data, { requireAuth: true })
+  },
+
+  async confirmPaymentIntent(data: ConfirmPaymentIntentRequest): Promise<{ payment_id: string; status: string; payment_intent_id: string; stripe_status: string }> {
+    return apiClient.post("/payments/intent/confirm", data, { requireAuth: true })
   },
 }
 

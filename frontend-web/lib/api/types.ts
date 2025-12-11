@@ -200,6 +200,27 @@ export interface PaymentResponse {
   created_at: string
 }
 
+// Stripe PaymentIntent types
+export interface CreatePaymentIntentRequest {
+  booking_id: string
+  amount: number
+  currency?: string
+}
+
+export interface PaymentIntentResponse {
+  payment_id: string
+  client_secret: string
+  payment_intent_id: string
+  amount: number
+  currency: string
+  status: string
+}
+
+export interface ConfirmPaymentIntentRequest {
+  payment_id: string
+  payment_intent_id: string
+}
+
 // Queue types
 export interface JoinQueueRequest {
   event_id: string
