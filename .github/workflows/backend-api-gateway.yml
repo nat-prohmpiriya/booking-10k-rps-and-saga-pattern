@@ -1,5 +1,7 @@
 name: Build API Gateway
+
 on:
+  workflow_dispatch:
   push:
     branches: [main]        # trigger เมื่อ push ไป main
     paths:
