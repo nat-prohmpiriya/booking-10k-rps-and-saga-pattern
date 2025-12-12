@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -26,6 +27,10 @@ type PostgresConfig struct {
 	// Retry configuration
 	MaxRetries    int
 	RetryInterval time.Duration
+
+	// Telemetry configuration
+	EnableTracing bool
+	ServiceName   string
 }
 
 // DefaultPostgresConfig returns default configuration
@@ -78,6 +83,14 @@ func NewPostgres(ctx context.Context, cfg *PostgresConfig) (*PostgresDB, error) 
 	poolConfig.MaxConnLifetime = cfg.MaxConnLifetime
 	poolConfig.MaxConnIdleTime = cfg.MaxConnIdleTime
 	poolConfig.ConnConfig.ConnectTimeout = cfg.ConnectTimeout
+
+	// Enable OpenTelemetry tracing if configured
+	if cfg.EnableTracing {
+		opts := []otelpgx.Option{
+			otelpgx.WithIncludeQueryParameters(),
+		}
+		poolConfig.ConnConfig.Tracer = otelpgx.NewTracer(opts...)
+	}
 
 	// Connect with retry logic
 	var pool *pgxpool.Pool

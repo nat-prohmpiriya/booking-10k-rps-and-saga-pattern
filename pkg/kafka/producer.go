@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/telemetry"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -107,7 +108,7 @@ func NewProducer(ctx context.Context, cfg *ProducerConfig) (*Producer, error) {
 	}, nil
 }
 
-// Produce sends a message to Kafka
+// Produce sends a message to Kafka with optional tracing
 func (p *Producer) Produce(ctx context.Context, msg *Message) error {
 	p.mu.RLock()
 	if p.closed {
@@ -115,6 +116,16 @@ func (p *Producer) Produce(ctx context.Context, msg *Message) error {
 		return fmt.Errorf("producer is closed")
 	}
 	p.mu.RUnlock()
+
+	// Start producer span
+	ctx, span := telemetry.StartProducerSpan(ctx, msg.Topic, string(msg.Key))
+	defer span.End()
+
+	// Inject trace context into message headers
+	if msg.Headers == nil {
+		msg.Headers = make(map[string]string)
+	}
+	msg.Headers = telemetry.InjectKafkaHeaders(ctx, msg.Headers)
 
 	record := &kgo.Record{
 		Topic: msg.Topic,
@@ -135,7 +146,14 @@ func (p *Producer) Produce(ctx context.Context, msg *Message) error {
 
 	result := p.client.ProduceSync(ctx, record)
 	if err := result.FirstErr(); err != nil {
+		telemetry.SetSpanError(ctx, err)
 		return fmt.Errorf("failed to produce message: %w", err)
+	}
+
+	// Add partition and offset info to span
+	if len(result) > 0 {
+		r := result[0].Record
+		telemetry.AddKafkaProducerAttributes(span, r.Partition, r.Offset)
 	}
 
 	return nil

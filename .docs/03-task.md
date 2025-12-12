@@ -1027,11 +1027,11 @@
 
 ---
 
-**Phase 5 Milestone:** NestJS services (Notification + Analytics) operational with MongoDB
+**Phase 5 Milestone:** NestJS services (Notification + Analytics)  with MongoDB
 
 ---
 
-##[ ]  Phase 6: Virtual Queue & Advanced Features
+## [ ]  Phase 6: Virtual Queue & Advanced Features
 
 **Goal:** Implement virtual queue and audit logging
 
@@ -1299,7 +1299,7 @@
 
 ---
 
-### [ ]  P7-11: User Dashboard
+### [x]  P7-11: User Dashboard
 | Field | Value |
 |-------|-------|
 | **Description** | Create user dashboard pages |
@@ -1307,9 +1307,9 @@
 | **Acceptance Criteria** | - Booking history list<br>- Pending bookings with "Resume Payment"<br>- Profile settings |
 
 - [x] Create booking history page
-- [ ] Show pending bookings with resume option
-- [ ] Create profile settings page
-- [ ] Handle profile update
+- [x] Show pending bookings with resume option
+- [x] Create profile settings page
+- [x] Handle profile update
 
 ---
 
@@ -1321,19 +1321,19 @@
 
 **Goal:** Production-grade monitoring with unified OTel stack
 
-### [ ]  P8-01: OpenTelemetry Package
+### [x]  P8-01: OpenTelemetry Package
 | Field | Value |
 |-------|-------|
 | **Description** | Create shared OTel package |
 | **Technical Context** | `pkg/telemetry/` |
 | **Acceptance Criteria** | - OTel SDK initialization<br>- OTLP exporter configured<br>- Tracer and Meter providers setup |
 
-- [ ] Create telemetry package
-- [ ] Setup TracerProvider
-- [ ] Setup MeterProvider
-- [ ] Configure OTLP exporters
-- [ ] Add resource attributes
-- [ ] Write tests
+- [x] Create telemetry package
+- [x] Setup TracerProvider
+- [x] Setup MeterProvider
+- [x] Configure OTLP exporters
+- [x] Add resource attributes
+- [x] Write tests
 
 ---
 

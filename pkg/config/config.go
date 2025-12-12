@@ -100,9 +100,10 @@ type JWTConfig struct {
 
 // OTelConfig holds OpenTelemetry settings
 type OTelConfig struct {
-	Enabled       bool   `mapstructure:"enabled"`
-	ServiceName   string `mapstructure:"service_name"`
-	CollectorAddr string `mapstructure:"collector_addr"`
+	Enabled       bool    `mapstructure:"enabled"`
+	ServiceName   string  `mapstructure:"service_name"`
+	CollectorAddr string  `mapstructure:"collector_addr"`
+	SampleRatio   float64 `mapstructure:"sample_ratio"`
 }
 
 // Load loads configuration from environment variables and .env file
@@ -225,6 +226,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("OTEL_ENABLED", true)
 	v.SetDefault("OTEL_SERVICE_NAME", "booking-rush")
 	v.SetDefault("OTEL_COLLECTOR_ADDR", "localhost:4317")
+	v.SetDefault("OTEL_SAMPLE_RATIO", 1.0)
 }
 
 func bindConfig(v *viper.Viper, cfg *Config) error {
@@ -284,6 +286,7 @@ func bindConfig(v *viper.Viper, cfg *Config) error {
 	cfg.OTel.Enabled = v.GetBool("OTEL_ENABLED")
 	cfg.OTel.ServiceName = v.GetString("OTEL_SERVICE_NAME")
 	cfg.OTel.CollectorAddr = v.GetString("OTEL_COLLECTOR_ADDR")
+	cfg.OTel.SampleRatio = v.GetFloat64("OTEL_SAMPLE_RATIO")
 
 	return nil
 }

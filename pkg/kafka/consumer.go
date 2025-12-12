@@ -6,7 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/telemetry"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Consumer represents a Kafka consumer
@@ -156,6 +158,19 @@ type Record struct {
 	Value     []byte
 	Headers   map[string]string
 	Timestamp time.Time
+}
+
+// ExtractContext extracts trace context from record headers
+func (r *Record) ExtractContext(ctx context.Context) context.Context {
+	return telemetry.ExtractKafkaContext(ctx, r.Headers)
+}
+
+// StartProcessingSpan starts a consumer span for processing this record
+func (r *Record) StartProcessingSpan(ctx context.Context) (context.Context, trace.Span) {
+	// First extract parent context from headers
+	ctx = r.ExtractContext(ctx)
+	// Then start consumer span
+	return telemetry.StartConsumerSpan(ctx, r.Topic, r.Partition, r.Offset, string(r.Key))
 }
 
 // CommitRecords commits the offsets for the given records

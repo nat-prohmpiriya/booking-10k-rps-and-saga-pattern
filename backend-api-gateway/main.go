@@ -18,6 +18,7 @@ import (
 	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/database"
 	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/logger"
 	pkgredis "github.com/prohmpiriya/booking-rush-10k-rps/pkg/redis"
+	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/telemetry"
 )
 
 func main() {
@@ -43,6 +44,22 @@ func main() {
 
 	ctx := context.Background()
 
+	// Initialize OpenTelemetry
+	telemetryCfg := &telemetry.Config{
+		Enabled:        cfg.OTel.Enabled,
+		ServiceName:    "api-gateway",
+		ServiceVersion: cfg.App.Version,
+		Environment:    cfg.App.Environment,
+		CollectorAddr:  cfg.OTel.CollectorAddr,
+		SampleRatio:    cfg.OTel.SampleRatio,
+	}
+	if _, err := telemetry.Init(ctx, telemetryCfg); err != nil {
+		log.Warn(fmt.Sprintf("Failed to initialize telemetry: %v", err))
+	} else if telemetryCfg.Enabled {
+		log.Info(fmt.Sprintf("Telemetry initialized (collector: %s)", telemetryCfg.CollectorAddr))
+	}
+	defer telemetry.Shutdown(ctx)
+
 	// Initialize database connection (optional, for /ready check)
 	var db *database.PostgresDB
 	dbCfg := &database.PostgresConfig{
@@ -56,6 +73,7 @@ func main() {
 		MinConns:      int32(cfg.Database.MaxIdleConns),
 		MaxRetries:    3,
 		RetryInterval: 2 * time.Second,
+		EnableTracing: cfg.OTel.Enabled,
 	}
 	db, err = database.NewPostgres(ctx, dbCfg)
 	if err != nil {
@@ -75,6 +93,8 @@ func main() {
 		PoolSize:      cfg.Redis.PoolSize,
 		MaxRetries:    3,
 		RetryInterval: 2 * time.Second,
+		EnableTracing: cfg.OTel.Enabled,
+		ServiceName:   "api-gateway",
 	}
 	redis, err = pkgredis.NewClient(ctx, redisCfg)
 	if err != nil {
@@ -93,6 +113,13 @@ func main() {
 
 	// Apply global middlewares
 	router.Use(gin.Recovery())
+
+	// Add OpenTelemetry tracing middleware if enabled
+	if cfg.OTel.Enabled {
+		router.Use(telemetry.TracingMiddleware("api-gateway"))
+		router.Use(telemetry.TraceHeaderMiddleware())
+	}
+
 	router.Use(middleware.RequestID())
 	router.Use(middleware.Logger(log))
 	router.Use(middleware.CORS())

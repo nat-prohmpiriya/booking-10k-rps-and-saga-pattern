@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -27,6 +28,10 @@ type Config struct {
 	// Retry configuration
 	MaxRetries    int
 	RetryInterval time.Duration
+
+	// Telemetry configuration
+	EnableTracing bool
+	ServiceName   string
 }
 
 // DefaultConfig returns default Redis configuration
@@ -77,6 +82,28 @@ func NewClient(ctx context.Context, cfg *Config) (*Client, error) {
 	}
 
 	client := redis.NewClient(opts)
+
+	// Enable OpenTelemetry tracing if configured
+	if cfg.EnableTracing {
+		serviceName := cfg.ServiceName
+		if serviceName == "" {
+			serviceName = "redis"
+		}
+
+		// Add tracing hook
+		if err := redisotel.InstrumentTracing(client,
+			redisotel.WithDBStatement(true),
+		); err != nil {
+			client.Close()
+			return nil, fmt.Errorf("failed to instrument redis tracing: %w", err)
+		}
+
+		// Add metrics hook
+		if err := redisotel.InstrumentMetrics(client); err != nil {
+			client.Close()
+			return nil, fmt.Errorf("failed to instrument redis metrics: %w", err)
+		}
+	}
 
 	// Connect with retry logic
 	var lastErr error
