@@ -30,7 +30,7 @@ dist/
 coverage.html
 
 # Go workspace
-go.work.sum
+# go.work.sum  # ต้อง commit เพื่อให้ Docker build ได้
 
 # Vendor (if not committing)
 # vendor/
