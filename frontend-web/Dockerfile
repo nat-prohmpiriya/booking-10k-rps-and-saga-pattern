@@ -2,27 +2,19 @@
 # Multi-stage build for optimized image
 
 # ================================
-# Stage 1: Dependencies
+# Stage 1: Build
 # ================================
-FROM node:20-alpine AS deps
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 # Copy package files
 COPY package.json package-lock.json* ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install ALL dependencies (including devDependencies for build)
+RUN npm ci
 
-# ================================
-# Stage 2: Build
-# ================================
-FROM node:20-alpine AS builder
-
-WORKDIR /app
-
-# Copy dependencies
-COPY --from=deps /app/node_modules ./node_modules
+# Copy source code
 COPY . .
 
 # Set environment for build
