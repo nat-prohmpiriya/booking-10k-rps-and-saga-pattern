@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Check, Download, Wallet, Calendar, MapPin, Ticket, AlertTriangle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,29 @@ interface BookingDetails {
   zone: ShowZoneResponse | null
 }
 
+// Loading fallback component
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
+      <div className="text-center space-y-4">
+        <Loader2 className="w-12 h-12 animate-spin text-[#d4af37] mx-auto" />
+        <p className="text-zinc-400">Loading your booking...</p>
+      </div>
+    </div>
+  )
+}
+
+// Main page component with Suspense wrapper
 export default function BookingConfirmationPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <BookingConfirmationContent />
+    </Suspense>
+  )
+}
+
+// Content component that uses useSearchParams
+function BookingConfirmationContent() {
   const searchParams = useSearchParams()
   const bookingId = searchParams.get("booking_id")
 
