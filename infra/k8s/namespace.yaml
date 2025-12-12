@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: booking-rush
+  labels:
+    app.kubernetes.io/name: booking-rush
+    app.kubernetes.io/part-of: booking-rush

@@ -1,0 +1,87 @@
+# OpenTelemetry Collector Configuration
+# For Booking Rush - receives logs, metrics, traces from Go services
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1000
+
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  resource:
+    attributes:
+      - key: service.namespace
+        value: booking-rush
+        action: upsert
+
+exporters:
+  # Traces -> Tempo (use Tailscale IP)
+  otlp/tempo:
+    endpoint: 100.115.203.74:14317
+    tls:
+      insecure: true
+
+  # Metrics -> Prometheus (expose /metrics endpoint)
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: booking_rush
+    send_timestamps: true
+    metric_expiration: 5m
+
+  # Logs -> Loki (use Tailscale IP)
+  loki:
+    endpoint: http://100.115.203.74:3100/loki/api/v1/push
+    labels:
+      attributes:
+        service.name: "service_name"
+        service.namespace: "service_namespace"
+      resource:
+        service.name: "service_name"
+        deployment.environment: "environment"
+
+  # Debug (for troubleshooting)
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, zpages]
+
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlp/tempo]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheus]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [loki]
+
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: 0.0.0.0:8888

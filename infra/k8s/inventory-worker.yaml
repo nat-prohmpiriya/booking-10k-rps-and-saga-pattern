@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-worker
+  namespace: booking-rush
+  labels:
+    app: inventory-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventory-worker
+  template:
+    metadata:
+      labels:
+        app: inventory-worker
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: inventory-worker
+          image: ghcr.io/nat-prohmpiriya/booking-rush/inventory-worker:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: booking-rush-config
+            - secretRef:
+                name: booking-rush-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

@@ -1,0 +1,25 @@
+# MongoDB Helm Values (Bitnami)
+
+auth:
+  enabled: true
+  rootPassword: "${MONGO_PASSWORD}"
+  # Custom user/database
+  usernames:
+    - "${MONGO_USERNAME}"
+  passwords:
+    - "${MONGO_PASSWORD}"
+  databases:
+    - "${MONGO_DATABASE}"
+
+architecture: standalone
+
+persistence:
+  size: 5Gi
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 512Mi
+    cpu: 500m

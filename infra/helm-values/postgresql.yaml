@@ -1,0 +1,23 @@
+# PostgreSQL Helm Values (Bitnami)
+
+auth:
+  postgresPassword: "${PG_PASSWORD}"
+  database: "${PG_DATABASE}"
+
+primary:
+  persistence:
+    size: 10Gi
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  # PostgreSQL configuration
+  configuration: |
+    listen_addresses = '*'
+    max_connections = 200
+    shared_buffers = 128MB
+
+architecture: standalone

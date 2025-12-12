@@ -1,0 +1,25 @@
+# Node Exporter Helm Values (Prometheus Community)
+
+# Run on all nodes
+hostRootFsMount:
+  enabled: true
+
+# Resources
+resources:
+  requests:
+    memory: 32Mi
+    cpu: 50m
+  limits:
+    memory: 64Mi
+    cpu: 100m
+
+# Service - expose via NodePort for external Prometheus
+service:
+  type: NodePort
+  port: 9100
+  nodePort: 30100
+
+# Prometheus annotations
+prometheus:
+  monitor:
+    enabled: false  # Enable if using Prometheus Operator

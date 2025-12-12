@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: queue-release-worker
+  namespace: booking-rush
+  labels:
+    app: queue-release-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: queue-release-worker
+  template:
+    metadata:
+      labels:
+        app: queue-release-worker
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: queue-release-worker
+          image: ghcr.io/nat-prohmpiriya/booking-rush/queue-release-worker:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: booking-rush-config
+            - secretRef:
+                name: booking-rush-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

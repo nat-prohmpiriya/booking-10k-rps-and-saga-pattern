@@ -1,0 +1,65 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: booking-rush-ingress
+  namespace: booking-rush
+spec:
+  ingressClassName: traefik
+  rules:
+    # API Gateway
+    - host: api-booking-rush.dackbox.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+    # Frontend
+    - host: booking-rush.dackbox.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-web
+                port:
+                  number: 3000
+  # Uncomment when using cert-manager for SSL
+  # tls:
+  #   - hosts:
+  #       - api.booking-rush.dackbox.com
+  #       - booking-rush.dackbox.com
+  #     secretName: booking-rush-tls
+---
+# NodePort service for direct access (without ingress controller)
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway-nodeport
+  namespace: booking-rush
+spec:
+  type: NodePort
+  selector:
+    app: api-gateway
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-web-nodeport
+  namespace: booking-rush
+spec:
+  type: NodePort
+  selector:
+    app: frontend-web
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30000
