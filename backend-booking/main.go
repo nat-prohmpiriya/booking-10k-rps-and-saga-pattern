@@ -67,14 +67,15 @@ func main() {
 	defer telemetry.Shutdown(ctx)
 
 	// Initialize database connection with optimized settings for 10k RPS
+	// Uses BookingDatabase config (Microservice - each service has its own database)
 	var db *database.PostgresDB
 	dbCfg := &database.PostgresConfig{
-		Host:            cfg.Database.Host,
-		Port:            cfg.Database.Port,
-		User:            cfg.Database.User,
-		Password:        cfg.Database.Password,
-		Database:        cfg.Database.DBName,
-		SSLMode:         cfg.Database.SSLMode,
+		Host:            cfg.BookingDatabase.Host,
+		Port:            cfg.BookingDatabase.Port,
+		User:            cfg.BookingDatabase.User,
+		Password:        cfg.BookingDatabase.Password,
+		Database:        cfg.BookingDatabase.DBName,
+		SSLMode:         cfg.BookingDatabase.SSLMode,
 		MaxConns:        200,              // Increased for 10k RPS
 		MinConns:        50,               // Keep minimum pool ready
 		MaxConnLifetime: 30 * time.Minute, // Reduce to prevent stale connections

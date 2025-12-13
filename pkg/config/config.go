@@ -12,9 +12,10 @@ import (
 type Config struct {
 	App            AppConfig      `mapstructure:"app"`
 	Server         ServerConfig   `mapstructure:"server"`
-	Database       DatabaseConfig `mapstructure:"database"`        // Legacy/default database
-	AuthDatabase   DatabaseConfig `mapstructure:"auth_database"`   // Auth service database
-	TicketDatabase DatabaseConfig `mapstructure:"ticket_database"` // Ticket service database
+	AuthDatabase   DatabaseConfig `mapstructure:"auth_database"`   // Auth service database (required for auth-service)
+	TicketDatabase DatabaseConfig `mapstructure:"ticket_database"` // Ticket service database (required for ticket-service)
+	BookingDatabase DatabaseConfig `mapstructure:"booking_database"` // Booking service database
+	PaymentDatabase DatabaseConfig `mapstructure:"payment_database"` // Payment service database
 	Redis          RedisConfig    `mapstructure:"redis"`
 	Kafka          KafkaConfig    `mapstructure:"kafka"`
 	MongoDB        MongoDBConfig  `mapstructure:"mongodb"`
@@ -186,20 +187,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("SERVER_WRITE_TIMEOUT", "30s")
 	v.SetDefault("SERVER_IDLE_TIMEOUT", "120s")
 
-	// Database defaults (legacy/shared)
-	v.SetDefault("DATABASE_HOST", "localhost")
-	v.SetDefault("DATABASE_PORT", 5432)
-	v.SetDefault("DATABASE_USER", "postgres")
-	v.SetDefault("DATABASE_PASSWORD", "postgres")
-	v.SetDefault("DATABASE_DBNAME", "booking_rush")
-	v.SetDefault("DATABASE_SSLMODE", "disable")
-	v.SetDefault("DATABASE_MAX_OPEN_CONNS", 100)
-	v.SetDefault("DATABASE_MAX_IDLE_CONNS", 10)
-	v.SetDefault("DATABASE_CONN_MAX_LIFETIME", "1h")
-	v.SetDefault("DATABASE_CONN_MAX_IDLE_TIME", "30m")
+	// ==========================================================================
+	// Per-Service Database Defaults (Microservice Architecture)
+	// Each service MUST have its own database - no shared database allowed
+	// ==========================================================================
 
-	// Auth Database defaults (falls back to DATABASE_* if not set)
-	v.SetDefault("AUTH_DATABASE_HOST", "")
+	// Auth Database (auth-service)
+	v.SetDefault("AUTH_DATABASE_HOST", "localhost")
 	v.SetDefault("AUTH_DATABASE_PORT", 5432)
 	v.SetDefault("AUTH_DATABASE_USER", "postgres")
 	v.SetDefault("AUTH_DATABASE_PASSWORD", "postgres")
@@ -210,8 +204,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("AUTH_DATABASE_CONN_MAX_LIFETIME", "1h")
 	v.SetDefault("AUTH_DATABASE_CONN_MAX_IDLE_TIME", "30m")
 
-	// Ticket Database defaults (falls back to DATABASE_* if not set)
-	v.SetDefault("TICKET_DATABASE_HOST", "")
+	// Ticket Database (ticket-service)
+	v.SetDefault("TICKET_DATABASE_HOST", "localhost")
 	v.SetDefault("TICKET_DATABASE_PORT", 5432)
 	v.SetDefault("TICKET_DATABASE_USER", "postgres")
 	v.SetDefault("TICKET_DATABASE_PASSWORD", "postgres")
@@ -221,6 +215,30 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("TICKET_DATABASE_MAX_IDLE_CONNS", 10)
 	v.SetDefault("TICKET_DATABASE_CONN_MAX_LIFETIME", "1h")
 	v.SetDefault("TICKET_DATABASE_CONN_MAX_IDLE_TIME", "30m")
+
+	// Booking Database (booking-service)
+	v.SetDefault("BOOKING_DATABASE_HOST", "localhost")
+	v.SetDefault("BOOKING_DATABASE_PORT", 5432)
+	v.SetDefault("BOOKING_DATABASE_USER", "postgres")
+	v.SetDefault("BOOKING_DATABASE_PASSWORD", "postgres")
+	v.SetDefault("BOOKING_DATABASE_DBNAME", "booking_db")
+	v.SetDefault("BOOKING_DATABASE_SSLMODE", "disable")
+	v.SetDefault("BOOKING_DATABASE_MAX_OPEN_CONNS", 100)
+	v.SetDefault("BOOKING_DATABASE_MAX_IDLE_CONNS", 10)
+	v.SetDefault("BOOKING_DATABASE_CONN_MAX_LIFETIME", "1h")
+	v.SetDefault("BOOKING_DATABASE_CONN_MAX_IDLE_TIME", "30m")
+
+	// Payment Database (payment-service)
+	v.SetDefault("PAYMENT_DATABASE_HOST", "localhost")
+	v.SetDefault("PAYMENT_DATABASE_PORT", 5432)
+	v.SetDefault("PAYMENT_DATABASE_USER", "postgres")
+	v.SetDefault("PAYMENT_DATABASE_PASSWORD", "postgres")
+	v.SetDefault("PAYMENT_DATABASE_DBNAME", "payment_db")
+	v.SetDefault("PAYMENT_DATABASE_SSLMODE", "disable")
+	v.SetDefault("PAYMENT_DATABASE_MAX_OPEN_CONNS", 100)
+	v.SetDefault("PAYMENT_DATABASE_MAX_IDLE_CONNS", 10)
+	v.SetDefault("PAYMENT_DATABASE_CONN_MAX_LIFETIME", "1h")
+	v.SetDefault("PAYMENT_DATABASE_CONN_MAX_IDLE_TIME", "30m")
 
 	// Redis defaults
 	v.SetDefault("REDIS_HOST", "localhost")
@@ -269,53 +287,57 @@ func bindConfig(v *viper.Viper, cfg *Config) error {
 	cfg.Server.WriteTimeout = v.GetDuration("SERVER_WRITE_TIMEOUT")
 	cfg.Server.IdleTimeout = v.GetDuration("SERVER_IDLE_TIMEOUT")
 
-	// Database (legacy/shared)
-	cfg.Database.Host = v.GetString("DATABASE_HOST")
-	cfg.Database.Port = v.GetInt("DATABASE_PORT")
-	cfg.Database.User = v.GetString("DATABASE_USER")
-	cfg.Database.Password = v.GetString("DATABASE_PASSWORD")
-	cfg.Database.DBName = v.GetString("DATABASE_DBNAME")
-	cfg.Database.SSLMode = v.GetString("DATABASE_SSLMODE")
-	cfg.Database.MaxOpenConns = v.GetInt("DATABASE_MAX_OPEN_CONNS")
-	cfg.Database.MaxIdleConns = v.GetInt("DATABASE_MAX_IDLE_CONNS")
-	cfg.Database.ConnMaxLifetime = v.GetDuration("DATABASE_CONN_MAX_LIFETIME")
-	cfg.Database.ConnMaxIdleTime = v.GetDuration("DATABASE_CONN_MAX_IDLE_TIME")
+	// ==========================================================================
+	// Per-Service Database Bindings (No fallback - true microservice)
+	// ==========================================================================
 
-	// Auth Database (falls back to Database if AUTH_DATABASE_HOST is empty)
-	authHost := v.GetString("AUTH_DATABASE_HOST")
-	if authHost == "" {
-		// Fallback to default Database config
-		cfg.AuthDatabase = cfg.Database
-	} else {
-		cfg.AuthDatabase.Host = authHost
-		cfg.AuthDatabase.Port = v.GetInt("AUTH_DATABASE_PORT")
-		cfg.AuthDatabase.User = v.GetString("AUTH_DATABASE_USER")
-		cfg.AuthDatabase.Password = v.GetString("AUTH_DATABASE_PASSWORD")
-		cfg.AuthDatabase.DBName = v.GetString("AUTH_DATABASE_DBNAME")
-		cfg.AuthDatabase.SSLMode = v.GetString("AUTH_DATABASE_SSLMODE")
-		cfg.AuthDatabase.MaxOpenConns = v.GetInt("AUTH_DATABASE_MAX_OPEN_CONNS")
-		cfg.AuthDatabase.MaxIdleConns = v.GetInt("AUTH_DATABASE_MAX_IDLE_CONNS")
-		cfg.AuthDatabase.ConnMaxLifetime = v.GetDuration("AUTH_DATABASE_CONN_MAX_LIFETIME")
-		cfg.AuthDatabase.ConnMaxIdleTime = v.GetDuration("AUTH_DATABASE_CONN_MAX_IDLE_TIME")
-	}
+	// Auth Database (auth-service)
+	cfg.AuthDatabase.Host = v.GetString("AUTH_DATABASE_HOST")
+	cfg.AuthDatabase.Port = v.GetInt("AUTH_DATABASE_PORT")
+	cfg.AuthDatabase.User = v.GetString("AUTH_DATABASE_USER")
+	cfg.AuthDatabase.Password = v.GetString("AUTH_DATABASE_PASSWORD")
+	cfg.AuthDatabase.DBName = v.GetString("AUTH_DATABASE_DBNAME")
+	cfg.AuthDatabase.SSLMode = v.GetString("AUTH_DATABASE_SSLMODE")
+	cfg.AuthDatabase.MaxOpenConns = v.GetInt("AUTH_DATABASE_MAX_OPEN_CONNS")
+	cfg.AuthDatabase.MaxIdleConns = v.GetInt("AUTH_DATABASE_MAX_IDLE_CONNS")
+	cfg.AuthDatabase.ConnMaxLifetime = v.GetDuration("AUTH_DATABASE_CONN_MAX_LIFETIME")
+	cfg.AuthDatabase.ConnMaxIdleTime = v.GetDuration("AUTH_DATABASE_CONN_MAX_IDLE_TIME")
 
-	// Ticket Database (falls back to Database if TICKET_DATABASE_HOST is empty)
-	ticketHost := v.GetString("TICKET_DATABASE_HOST")
-	if ticketHost == "" {
-		// Fallback to default Database config
-		cfg.TicketDatabase = cfg.Database
-	} else {
-		cfg.TicketDatabase.Host = ticketHost
-		cfg.TicketDatabase.Port = v.GetInt("TICKET_DATABASE_PORT")
-		cfg.TicketDatabase.User = v.GetString("TICKET_DATABASE_USER")
-		cfg.TicketDatabase.Password = v.GetString("TICKET_DATABASE_PASSWORD")
-		cfg.TicketDatabase.DBName = v.GetString("TICKET_DATABASE_DBNAME")
-		cfg.TicketDatabase.SSLMode = v.GetString("TICKET_DATABASE_SSLMODE")
-		cfg.TicketDatabase.MaxOpenConns = v.GetInt("TICKET_DATABASE_MAX_OPEN_CONNS")
-		cfg.TicketDatabase.MaxIdleConns = v.GetInt("TICKET_DATABASE_MAX_IDLE_CONNS")
-		cfg.TicketDatabase.ConnMaxLifetime = v.GetDuration("TICKET_DATABASE_CONN_MAX_LIFETIME")
-		cfg.TicketDatabase.ConnMaxIdleTime = v.GetDuration("TICKET_DATABASE_CONN_MAX_IDLE_TIME")
-	}
+	// Ticket Database (ticket-service)
+	cfg.TicketDatabase.Host = v.GetString("TICKET_DATABASE_HOST")
+	cfg.TicketDatabase.Port = v.GetInt("TICKET_DATABASE_PORT")
+	cfg.TicketDatabase.User = v.GetString("TICKET_DATABASE_USER")
+	cfg.TicketDatabase.Password = v.GetString("TICKET_DATABASE_PASSWORD")
+	cfg.TicketDatabase.DBName = v.GetString("TICKET_DATABASE_DBNAME")
+	cfg.TicketDatabase.SSLMode = v.GetString("TICKET_DATABASE_SSLMODE")
+	cfg.TicketDatabase.MaxOpenConns = v.GetInt("TICKET_DATABASE_MAX_OPEN_CONNS")
+	cfg.TicketDatabase.MaxIdleConns = v.GetInt("TICKET_DATABASE_MAX_IDLE_CONNS")
+	cfg.TicketDatabase.ConnMaxLifetime = v.GetDuration("TICKET_DATABASE_CONN_MAX_LIFETIME")
+	cfg.TicketDatabase.ConnMaxIdleTime = v.GetDuration("TICKET_DATABASE_CONN_MAX_IDLE_TIME")
+
+	// Booking Database (booking-service)
+	cfg.BookingDatabase.Host = v.GetString("BOOKING_DATABASE_HOST")
+	cfg.BookingDatabase.Port = v.GetInt("BOOKING_DATABASE_PORT")
+	cfg.BookingDatabase.User = v.GetString("BOOKING_DATABASE_USER")
+	cfg.BookingDatabase.Password = v.GetString("BOOKING_DATABASE_PASSWORD")
+	cfg.BookingDatabase.DBName = v.GetString("BOOKING_DATABASE_DBNAME")
+	cfg.BookingDatabase.SSLMode = v.GetString("BOOKING_DATABASE_SSLMODE")
+	cfg.BookingDatabase.MaxOpenConns = v.GetInt("BOOKING_DATABASE_MAX_OPEN_CONNS")
+	cfg.BookingDatabase.MaxIdleConns = v.GetInt("BOOKING_DATABASE_MAX_IDLE_CONNS")
+	cfg.BookingDatabase.ConnMaxLifetime = v.GetDuration("BOOKING_DATABASE_CONN_MAX_LIFETIME")
+	cfg.BookingDatabase.ConnMaxIdleTime = v.GetDuration("BOOKING_DATABASE_CONN_MAX_IDLE_TIME")
+
+	// Payment Database (payment-service)
+	cfg.PaymentDatabase.Host = v.GetString("PAYMENT_DATABASE_HOST")
+	cfg.PaymentDatabase.Port = v.GetInt("PAYMENT_DATABASE_PORT")
+	cfg.PaymentDatabase.User = v.GetString("PAYMENT_DATABASE_USER")
+	cfg.PaymentDatabase.Password = v.GetString("PAYMENT_DATABASE_PASSWORD")
+	cfg.PaymentDatabase.DBName = v.GetString("PAYMENT_DATABASE_DBNAME")
+	cfg.PaymentDatabase.SSLMode = v.GetString("PAYMENT_DATABASE_SSLMODE")
+	cfg.PaymentDatabase.MaxOpenConns = v.GetInt("PAYMENT_DATABASE_MAX_OPEN_CONNS")
+	cfg.PaymentDatabase.MaxIdleConns = v.GetInt("PAYMENT_DATABASE_MAX_IDLE_CONNS")
+	cfg.PaymentDatabase.ConnMaxLifetime = v.GetDuration("PAYMENT_DATABASE_CONN_MAX_LIFETIME")
+	cfg.PaymentDatabase.ConnMaxIdleTime = v.GetDuration("PAYMENT_DATABASE_CONN_MAX_IDLE_TIME")
 
 	// Redis
 	cfg.Redis.Host = v.GetString("REDIS_HOST")
@@ -363,14 +385,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid server port: %d", c.Server.Port)
 	}
 
-	if c.Database.Host == "" {
-		return fmt.Errorf("database host is required")
-	}
-
-	if c.Database.DBName == "" {
-		return fmt.Errorf("database name is required")
-	}
-
 	if c.JWT.Secret == "" {
 		return fmt.Errorf("JWT secret is required")
 	}
@@ -380,6 +394,50 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("JWT secret must be changed in production")
 	}
 
+	return nil
+}
+
+// ValidateAuthDatabase validates auth database configuration
+func (c *Config) ValidateAuthDatabase() error {
+	if c.AuthDatabase.Host == "" {
+		return fmt.Errorf("AUTH_DATABASE_HOST is required")
+	}
+	if c.AuthDatabase.DBName == "" {
+		return fmt.Errorf("AUTH_DATABASE_DBNAME is required")
+	}
+	return nil
+}
+
+// ValidateTicketDatabase validates ticket database configuration
+func (c *Config) ValidateTicketDatabase() error {
+	if c.TicketDatabase.Host == "" {
+		return fmt.Errorf("TICKET_DATABASE_HOST is required")
+	}
+	if c.TicketDatabase.DBName == "" {
+		return fmt.Errorf("TICKET_DATABASE_DBNAME is required")
+	}
+	return nil
+}
+
+// ValidateBookingDatabase validates booking database configuration
+func (c *Config) ValidateBookingDatabase() error {
+	if c.BookingDatabase.Host == "" {
+		return fmt.Errorf("BOOKING_DATABASE_HOST is required")
+	}
+	if c.BookingDatabase.DBName == "" {
+		return fmt.Errorf("BOOKING_DATABASE_DBNAME is required")
+	}
+	return nil
+}
+
+// ValidatePaymentDatabase validates payment database configuration
+func (c *Config) ValidatePaymentDatabase() error {
+	if c.PaymentDatabase.Host == "" {
+		return fmt.Errorf("PAYMENT_DATABASE_HOST is required")
+	}
+	if c.PaymentDatabase.DBName == "" {
+		return fmt.Errorf("PAYMENT_DATABASE_DBNAME is required")
+	}
 	return nil
 }
 

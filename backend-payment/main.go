@@ -68,14 +68,15 @@ func main() {
 	defer telemetry.Shutdown(ctx)
 
 	// Initialize database connection
+	// Uses PaymentDatabase config (Microservice - each service has its own database)
 	var db *database.PostgresDB
 	dbCfg := &database.PostgresConfig{
-		Host:            cfg.Database.Host,
-		Port:            cfg.Database.Port,
-		User:            cfg.Database.User,
-		Password:        cfg.Database.Password,
-		Database:        cfg.Database.DBName,
-		SSLMode:         cfg.Database.SSLMode,
+		Host:            cfg.PaymentDatabase.Host,
+		Port:            cfg.PaymentDatabase.Port,
+		User:            cfg.PaymentDatabase.User,
+		Password:        cfg.PaymentDatabase.Password,
+		Database:        cfg.PaymentDatabase.DBName,
+		SSLMode:         cfg.PaymentDatabase.SSLMode,
 		MaxConns:        100,
 		MinConns:        20,
 		MaxConnLifetime: 30 * time.Minute,

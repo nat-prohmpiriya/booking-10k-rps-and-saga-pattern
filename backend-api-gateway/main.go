@@ -15,7 +15,6 @@ import (
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-api-gateway/internal/middleware"
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-api-gateway/internal/proxy"
 	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/config"
-	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/database"
 	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/logger"
 	pkgredis "github.com/prohmpiriya/booking-rush-10k-rps/pkg/redis"
 	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/telemetry"
@@ -60,30 +59,11 @@ func main() {
 	}
 	defer telemetry.Shutdown(ctx)
 
-	// Initialize database connection (optional, for /ready check)
-	var db *database.PostgresDB
-	dbCfg := &database.PostgresConfig{
-		Host:          cfg.Database.Host,
-		Port:          cfg.Database.Port,
-		User:          cfg.Database.User,
-		Password:      cfg.Database.Password,
-		Database:      cfg.Database.DBName,
-		SSLMode:       cfg.Database.SSLMode,
-		MaxConns:      int32(cfg.Database.MaxOpenConns),
-		MinConns:      int32(cfg.Database.MaxIdleConns),
-		MaxRetries:    3,
-		RetryInterval: 2 * time.Second,
-		EnableTracing: cfg.OTel.Enabled,
-	}
-	db, err = database.NewPostgres(ctx, dbCfg)
-	if err != nil {
-		log.Warn("Database connection failed, /ready will report unhealthy")
-	} else {
-		defer db.Close()
-		log.Info("Database connected")
-	}
+	// API Gateway does NOT connect to any database directly (Microservice pattern)
+	// Each service manages its own database connection
+	// Gateway only uses Redis for rate limiting and health checks
 
-	// Initialize Redis connection (optional, for /ready check)
+	// Initialize Redis connection (for rate limiting and /ready check)
 	var redis *pkgredis.Client
 	redisCfg := &pkgredis.Config{
 		Host:          cfg.Redis.Host,
@@ -135,8 +115,8 @@ func main() {
 	}
 	router.Use(middleware.PerEndpointRateLimiter(rateLimitConfig))
 
-	// Health check handlers
-	healthHandler := handler.NewHealthHandler(db, redis)
+	// Health check handlers (no database - microservice pattern)
+	healthHandler := handler.NewHealthHandler(nil, redis)
 	router.GET("/health", healthHandler.Health)
 	router.GET("/ready", healthHandler.Ready)
 

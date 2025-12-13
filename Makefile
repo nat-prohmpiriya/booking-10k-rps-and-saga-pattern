@@ -14,9 +14,11 @@ NC := \033[0m # No Color
 DATABASE_URL ?= postgres://postgres:postgres@localhost:5432/booking_rush?sslmode=disable
 MIGRATIONS_PATH ?= scripts/migrations
 
-# Per-service database URLs
+# Per-service database URLs (Microservice Architecture)
 AUTH_DATABASE_URL ?= postgres://postgres:postgres@localhost:5432/auth_db?sslmode=disable
 TICKET_DATABASE_URL ?= postgres://postgres:postgres@localhost:5432/ticket_db?sslmode=disable
+BOOKING_DATABASE_URL ?= postgres://postgres:postgres@localhost:5432/booking_db?sslmode=disable
+PAYMENT_DATABASE_URL ?= postgres://postgres:postgres@localhost:5432/payment_db?sslmode=disable
 
 # Default target
 help:
@@ -298,12 +300,60 @@ endif
 	migrate create -ext sql -dir scripts/migrations/ticket -seq $(NAME)
 	@echo "$(GREEN)Ticket DB migration files created$(NC)"
 
+# Booking service migrations
+migrate-booking-up:
+	@echo "$(GREEN)Running Booking DB migrations up...$(NC)"
+	migrate -path scripts/migrations/booking -database "$(BOOKING_DATABASE_URL)" up
+	@echo "$(GREEN)Booking DB migrations completed$(NC)"
+
+migrate-booking-down:
+	@echo "$(YELLOW)Rolling back Booking DB migration...$(NC)"
+	migrate -path scripts/migrations/booking -database "$(BOOKING_DATABASE_URL)" down 1
+	@echo "$(GREEN)Booking DB rollback completed$(NC)"
+
+migrate-booking-status:
+	@echo "$(GREEN)Booking DB migration status:$(NC)"
+	migrate -path scripts/migrations/booking -database "$(BOOKING_DATABASE_URL)" version
+
+migrate-booking-create:
+ifndef NAME
+	$(error NAME is required. Usage: make migrate-booking-create NAME=create_something)
+endif
+	@echo "$(GREEN)Creating Booking DB migration: $(NAME)$(NC)"
+	migrate create -ext sql -dir scripts/migrations/booking -seq $(NAME)
+	@echo "$(GREEN)Booking DB migration files created$(NC)"
+
+# Payment service migrations
+migrate-payment-up:
+	@echo "$(GREEN)Running Payment DB migrations up...$(NC)"
+	migrate -path scripts/migrations/payment -database "$(PAYMENT_DATABASE_URL)" up
+	@echo "$(GREEN)Payment DB migrations completed$(NC)"
+
+migrate-payment-down:
+	@echo "$(YELLOW)Rolling back Payment DB migration...$(NC)"
+	migrate -path scripts/migrations/payment -database "$(PAYMENT_DATABASE_URL)" down 1
+	@echo "$(GREEN)Payment DB rollback completed$(NC)"
+
+migrate-payment-status:
+	@echo "$(GREEN)Payment DB migration status:$(NC)"
+	migrate -path scripts/migrations/payment -database "$(PAYMENT_DATABASE_URL)" version
+
+migrate-payment-create:
+ifndef NAME
+	$(error NAME is required. Usage: make migrate-payment-create NAME=create_something)
+endif
+	@echo "$(GREEN)Creating Payment DB migration: $(NAME)$(NC)"
+	migrate create -ext sql -dir scripts/migrations/payment -seq $(NAME)
+	@echo "$(GREEN)Payment DB migration files created$(NC)"
+
 # Run all service migrations
-migrate-all-up: migrate-auth-up migrate-ticket-up
+migrate-all-up: migrate-auth-up migrate-ticket-up migrate-booking-up migrate-payment-up
 	@echo "$(GREEN)All service migrations completed$(NC)"
 
 migrate-all-down:
 	@echo "$(YELLOW)Rolling back all service migrations...$(NC)"
+	-migrate -path scripts/migrations/payment -database "$(PAYMENT_DATABASE_URL)" down 1
+	-migrate -path scripts/migrations/booking -database "$(BOOKING_DATABASE_URL)" down 1
 	-migrate -path scripts/migrations/ticket -database "$(TICKET_DATABASE_URL)" down 1
 	-migrate -path scripts/migrations/auth -database "$(AUTH_DATABASE_URL)" down 1
 	@echo "$(GREEN)All service rollbacks completed$(NC)"
@@ -313,6 +363,10 @@ migrate-all-status:
 	-migrate -path scripts/migrations/auth -database "$(AUTH_DATABASE_URL)" version
 	@echo "$(GREEN)Ticket DB:$(NC)"
 	-migrate -path scripts/migrations/ticket -database "$(TICKET_DATABASE_URL)" version
+	@echo "$(GREEN)Booking DB:$(NC)"
+	-migrate -path scripts/migrations/booking -database "$(BOOKING_DATABASE_URL)" version
+	@echo "$(GREEN)Payment DB:$(NC)"
+	-migrate -path scripts/migrations/payment -database "$(PAYMENT_DATABASE_URL)" version
 
 # ================================
 # Testing
