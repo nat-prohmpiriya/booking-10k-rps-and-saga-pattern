@@ -189,6 +189,7 @@ export default function EventDetailPage() {
         totalPrice={getTotalPrice()}
         totalTickets={getTotalTickets()}
         isEventEnded={isEventEnded()}
+        showStatus={selectedShow?.status}
       />
     </div>
   )
