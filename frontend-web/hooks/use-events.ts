@@ -24,6 +24,7 @@ export interface EventDisplay {
   heroImage?: string
   price: number
   status?: string
+  saleStatus?: string // Aggregated from shows: scheduled, on_sale, sold_out, cancelled, completed
   city?: string
   country?: string
   bookingStartAt?: string
@@ -47,6 +48,7 @@ function mapApiEventToDisplay(event: EventResponse): EventDisplay {
     heroImage: event.banner_url || event.poster_url || "/images/events/event-1.jpg",
     price: event.min_price || 0,
     status: event.status,
+    saleStatus: event.sale_status,
     city: event.city,
     country: event.country,
     bookingStartAt: event.booking_start_at,

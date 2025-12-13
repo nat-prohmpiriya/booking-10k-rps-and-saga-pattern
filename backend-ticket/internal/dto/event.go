@@ -99,6 +99,7 @@ type EventResponse struct {
 	BookingStartAt    *string  `json:"booking_start_at,omitempty"`
 	BookingEndAt      *string  `json:"booking_end_at,omitempty"`
 	Status            string   `json:"status"`
+	SaleStatus        string   `json:"sale_status"` // Aggregated from shows: scheduled, on_sale, sold_out, cancelled, completed
 	IsFeatured        bool     `json:"is_featured"`
 	IsPublic          bool     `json:"is_public"`
 	MetaTitle         string   `json:"meta_title"`

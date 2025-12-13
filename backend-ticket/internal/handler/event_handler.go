@@ -16,12 +16,14 @@ import (
 // EventHandler handles event-related HTTP requests
 type EventHandler struct {
 	eventService service.EventService
+	showService  service.ShowService
 }
 
 // NewEventHandler creates a new EventHandler
-func NewEventHandler(eventService service.EventService) *EventHandler {
+func NewEventHandler(eventService service.EventService, showService service.ShowService) *EventHandler {
 	return &EventHandler{
 		eventService: eventService,
+		showService:  showService,
 	}
 }
 
@@ -49,7 +51,10 @@ func (h *EventHandler) List(c *gin.Context) {
 
 	eventResponses := make([]*dto.EventResponse, len(events))
 	for i, event := range events {
-		eventResponses[i] = toEventResponse(event)
+		// Fetch shows for this event to calculate sale status
+		shows, _, _ := h.showService.ListShowsByEvent(c.Request.Context(), event.ID, nil)
+		saleStatus := calculateSaleStatus(shows)
+		eventResponses[i] = toEventResponse(event, saleStatus)
 	}
 
 	c.JSON(http.StatusOK, response.Paginated(eventResponses, offset/limit+1, limit, int64(total)))
@@ -83,7 +88,11 @@ func (h *EventHandler) GetBySlug(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, response.Success(toEventResponse(event)))
+	// Fetch shows for this event to calculate sale status
+	shows, _, _ := h.showService.ListShowsByEvent(c.Request.Context(), event.ID, nil)
+	saleStatus := calculateSaleStatus(shows)
+
+	c.JSON(http.StatusOK, response.Success(toEventResponse(event, saleStatus)))
 }
 
 // GetByID handles GET /events/id/:id - retrieves an event by ID
@@ -114,7 +123,11 @@ func (h *EventHandler) GetByID(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, response.Success(toEventResponse(event)))
+	// Fetch shows for this event to calculate sale status
+	shows, _, _ := h.showService.ListShowsByEvent(c.Request.Context(), event.ID, nil)
+	saleStatus := calculateSaleStatus(shows)
+
+	c.JSON(http.StatusOK, response.Success(toEventResponse(event, saleStatus)))
 }
 
 // ListMyEvents handles GET /events/my - lists events owned by current user (Organizer)
@@ -156,7 +169,10 @@ func (h *EventHandler) ListMyEvents(c *gin.Context) {
 
 	eventResponses := make([]*dto.EventResponse, len(events))
 	for i, event := range events {
-		eventResponses[i] = toEventResponse(event)
+		// Fetch shows for this event to calculate sale status
+		shows, _, _ := h.showService.ListShowsByEvent(c.Request.Context(), event.ID, nil)
+		saleStatus := calculateSaleStatus(shows)
+		eventResponses[i] = toEventResponse(event, saleStatus)
 	}
 
 	c.JSON(http.StatusOK, response.Paginated(eventResponses, offset/limit+1, limit, int64(total)))
@@ -201,7 +217,8 @@ func (h *EventHandler) Create(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, response.Success(toEventResponse(event)))
+	// New event has no shows yet, default to "scheduled"
+	c.JSON(http.StatusCreated, response.Success(toEventResponse(event, "scheduled")))
 }
 
 // Update handles PUT /events/:id - updates an event
@@ -234,7 +251,11 @@ func (h *EventHandler) Update(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.Success(toEventResponse(event)))
+	// Fetch shows for this event to calculate sale status
+	shows, _, _ := h.showService.ListShowsByEvent(c.Request.Context(), event.ID, nil)
+	saleStatus := calculateSaleStatus(shows)
+
+	c.JSON(http.StatusOK, response.Success(toEventResponse(event, saleStatus)))
 }
 
 // Delete handles DELETE /events/:id - soft deletes an event
@@ -280,11 +301,63 @@ func (h *EventHandler) Publish(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.Success(toEventResponse(event)))
+	// Fetch shows for this event to calculate sale status
+	shows, _, _ := h.showService.ListShowsByEvent(c.Request.Context(), event.ID, nil)
+	saleStatus := calculateSaleStatus(shows)
+
+	c.JSON(http.StatusOK, response.Success(toEventResponse(event, saleStatus)))
+}
+
+// calculateSaleStatus determines the aggregated sale status from shows
+// Priority: on_sale > scheduled > sold_out > completed > cancelled
+func calculateSaleStatus(shows []*domain.Show) string {
+	if len(shows) == 0 {
+		return "scheduled" // Default if no shows
+	}
+
+	hasOnSale := false
+	hasScheduled := false
+	hasSoldOut := false
+	hasCompleted := false
+	hasCancelled := false
+
+	for _, show := range shows {
+		switch show.Status {
+		case domain.ShowStatusOnSale:
+			hasOnSale = true
+		case domain.ShowStatusScheduled:
+			hasScheduled = true
+		case domain.ShowStatusSoldOut:
+			hasSoldOut = true
+		case domain.ShowStatusCompleted:
+			hasCompleted = true
+		case domain.ShowStatusCancelled:
+			hasCancelled = true
+		}
+	}
+
+	// Return based on priority
+	if hasOnSale {
+		return domain.ShowStatusOnSale
+	}
+	if hasScheduled {
+		return domain.ShowStatusScheduled
+	}
+	if hasSoldOut {
+		return domain.ShowStatusSoldOut
+	}
+	if hasCompleted {
+		return domain.ShowStatusCompleted
+	}
+	if hasCancelled {
+		return domain.ShowStatusCancelled
+	}
+
+	return "scheduled"
 }
 
 // toEventResponse converts a domain event to response DTO
-func toEventResponse(event *domain.Event) *dto.EventResponse {
+func toEventResponse(event *domain.Event, saleStatus string) *dto.EventResponse {
 	resp := &dto.EventResponse{
 		ID:                event.ID,
 		TenantID:          event.TenantID,
@@ -305,6 +378,7 @@ func toEventResponse(event *domain.Event) *dto.EventResponse {
 		Longitude:         event.Longitude,
 		MaxTicketsPerUser: event.MaxTicketsPerUser,
 		Status:            event.Status,
+		SaleStatus:        saleStatus,
 		IsFeatured:        event.IsFeatured,
 		IsPublic:          event.IsPublic,
 		MetaTitle:         event.MetaTitle,

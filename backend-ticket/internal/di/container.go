@@ -77,7 +77,7 @@ func NewContainer(cfg *ContainerConfig) *Container {
 
 	// Initialize handlers
 	c.HealthHandler = handler.NewHealthHandler(c.DB)
-	c.EventHandler = handler.NewEventHandler(c.EventService)
+	c.EventHandler = handler.NewEventHandler(c.EventService, c.ShowService)
 	c.ShowHandler = handler.NewShowHandler(c.ShowService, c.EventService)
 	c.ShowZoneHandler = handler.NewShowZoneHandler(c.ShowZoneService, c.ShowService)
 	// c.TicketHandler = handler.NewTicketHandler(c.TicketService)

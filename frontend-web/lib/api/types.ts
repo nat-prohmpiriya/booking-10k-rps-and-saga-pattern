@@ -83,6 +83,7 @@ export interface EventResponse {
   booking_start_at?: string
   booking_end_at?: string
   status: string
+  sale_status: string // Aggregated from shows: scheduled, on_sale, sold_out, cancelled, completed
   is_featured: boolean
   is_public: boolean
   meta_title: string
