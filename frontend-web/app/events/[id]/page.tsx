@@ -127,9 +127,10 @@ export default function EventDetailPage() {
             </div>
 
             <CountdownTimer
-              targetDate={event.bookingStartAt ? new Date(event.bookingStartAt) : undefined}
-              saleEndDate={event.bookingEndAt ? new Date(event.bookingEndAt) : undefined}
+              targetDate={selectedShow?.sale_start_at ? new Date(selectedShow.sale_start_at) : undefined}
+              saleEndDate={selectedShow?.sale_end_at ? new Date(selectedShow.sale_end_at) : undefined}
               showDate={getShowDate()}
+              showStatus={selectedShow?.status}
             />
 
             {/* Show selector if multiple shows */}

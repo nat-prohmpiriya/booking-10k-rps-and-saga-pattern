@@ -28,6 +28,8 @@ import {
   BarChart3,
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { eventsApi, showsApi, zonesApi, UpdateEventRequest, UpdateShowRequest, UpdateZoneRequest } from "@/lib/api"
 import type { EventResponse, ShowResponse, ShowZoneResponse } from "@/lib/api/types"
 
@@ -191,21 +193,6 @@ export default function EditEventPage() {
     } catch (err) {
       console.error("Failed to update zone:", err)
       setError("Failed to update zone")
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleToggleZoneActive = async (zone: ShowZoneResponse) => {
-    try {
-      setIsSaving(true)
-      await zonesApi.update(zone.id, { is_active: !zone.is_active })
-      await loadEventData()
-      setSuccessMessage(`Zone ${zone.is_active ? "deactivated" : "activated"} successfully!`)
-      setTimeout(() => setSuccessMessage(""), 3000)
-    } catch (err) {
-      console.error("Failed to toggle zone:", err)
-      setError("Failed to toggle zone status")
     } finally {
       setIsSaving(false)
     }
@@ -491,11 +478,11 @@ export default function EditEventPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="description">Full Description</Label>
-                <textarea
+                <Textarea
                   id="description"
                   value={editForm.description || ""}
                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                  className="w-full min-h-[100px] px-3 py-2 border border-input rounded-md bg-input"
+                  className="min-h-[100px]"
                 />
               </div>
 
@@ -585,6 +572,8 @@ export default function EditEventPage() {
                           setShowForm({
                             name: show.name,
                             status: show.status,
+                            sale_start_at: show.sale_start_at,
+                            sale_end_at: show.sale_end_at,
                           })
                         }}
                       >
@@ -617,6 +606,26 @@ export default function EditEventPage() {
                           <option value="cancelled">Cancelled</option>
                           <option value="completed">Completed</option>
                         </select>
+                      </div>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Sale Start Date & Time</Label>
+                        <Input
+                          type="datetime-local"
+                          value={showForm.sale_start_at ? new Date(showForm.sale_start_at).toISOString().slice(0, 16) : ""}
+                          onChange={(e) => setShowForm({ ...showForm, sale_start_at: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+                        />
+                        <p className="text-xs text-muted-foreground">When ticket sales will open</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Sale End Date & Time</Label>
+                        <Input
+                          type="datetime-local"
+                          value={showForm.sale_end_at ? new Date(showForm.sale_end_at).toISOString().slice(0, 16) : ""}
+                          onChange={(e) => setShowForm({ ...showForm, sale_end_at: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+                        />
+                        <p className="text-xs text-muted-foreground">When ticket sales will close</p>
                       </div>
                     </div>
                     <div className="flex justify-end">
@@ -740,17 +749,6 @@ export default function EditEventPage() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-4">
-                                {/* Active Toggle Switch */}
-                                <div className="flex items-center gap-2">
-                                  <Switch
-                                    checked={zone.is_active}
-                                    onCheckedChange={() => handleToggleZoneActive(zone)}
-                                    disabled={isSaving}
-                                  />
-                                  <span className={`text-sm font-medium ${zone.is_active ? "text-green-500" : "text-muted-foreground"}`}>
-                                    {zone.is_active ? "Active" : "Inactive"}
-                                  </span>
-                                </div>
                                 {/* Edit Button */}
                                 <Button
                                   variant="ghost"
