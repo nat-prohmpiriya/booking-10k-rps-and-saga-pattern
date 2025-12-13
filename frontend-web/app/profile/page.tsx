@@ -430,11 +430,12 @@ export default function ProfilePage() {
                     }
 
                     return (
-                      <button
+                      <Button
                         key={item.label}
+                        variant="ghost"
                         onClick={() => handleMenuItemClick(item)}
                         disabled={isLoading}
-                        className="flex items-center gap-4 p-4 hover:bg-primary/5 transition-colors group w-full text-left disabled:opacity-50"
+                        className="flex items-center gap-4 p-4 h-auto hover:bg-primary/5 transition-colors group w-full justify-start text-left disabled:opacity-50"
                       >
                         <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                           {isLoading ? (
@@ -450,7 +451,7 @@ export default function ProfilePage() {
                           <p className="text-xs text-muted-foreground">{item.description}</p>
                         </div>
                         <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                      </button>
+                      </Button>
                     )
                   })}
                 </div>

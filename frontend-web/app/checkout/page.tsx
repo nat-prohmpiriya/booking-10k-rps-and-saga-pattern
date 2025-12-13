@@ -390,6 +390,32 @@ function CheckoutContent() {
 
   // Calculate totals
   const getOrderSummary = useCallback(() => {
+    // Direct mode: use reservation data
+    if (mode === "direct" && reservation) {
+      const subtotal = reservation.total_price
+      const serviceFee = Math.round(subtotal * 0.05) // 5% service fee
+      const total = subtotal + serviceFee
+
+      // Try to get zone info for display
+      const zone = zones.length > 0 ? zones[0] : null
+      const items = zone ? [{
+        zoneId: zone.id,
+        zoneName: zone.name || "Zone",
+        quantity: Math.round(subtotal / (zone.price || subtotal)), // Calculate quantity from price
+        price: zone.price || subtotal,
+        subtotal: subtotal,
+      }] : [{
+        zoneId: "unknown",
+        zoneName: "Ticket",
+        quantity: 1,
+        price: subtotal,
+        subtotal: subtotal,
+      }]
+
+      return { items, subtotal, serviceFee, total }
+    }
+
+    // Queue mode: calculate from ticket selection
     if (!queueData || !zones.length) {
       return { items: [], subtotal: 0, serviceFee: 0, total: 0 }
     }
@@ -410,7 +436,7 @@ function CheckoutContent() {
     const total = subtotal + serviceFee
 
     return { items, subtotal, serviceFee, total }
-  }, [queueData, zones])
+  }, [mode, reservation, queueData, zones])
 
   const orderSummary = getOrderSummary()
 
@@ -766,11 +792,12 @@ function CheckoutContent() {
                   <div className="mb-6 space-y-3">
                     <p className="text-sm font-medium text-gray-300">Saved Cards</p>
                     {savedPaymentMethods.map((pm) => (
-                      <button
+                      <Button
                         key={pm.id}
                         type="button"
+                        variant="outline"
                         onClick={() => setSelectedPaymentMethod(pm.id)}
-                        className={`w-full flex items-center gap-3 p-4 rounded-lg border transition-colors ${
+                        className={`w-full h-auto flex items-center gap-3 p-4 transition-colors ${
                           selectedPaymentMethod === pm.id
                             ? "border-[#d4af37] bg-[#d4af37]/10"
                             : "border-gray-700 bg-black/30 hover:border-gray-600"
@@ -796,14 +823,15 @@ function CheckoutContent() {
                         <span className="text-sm text-gray-500">
                           {pm.exp_month.toString().padStart(2, "0")}/{pm.exp_year.toString().slice(-2)}
                         </span>
-                      </button>
+                      </Button>
                     ))}
 
                     {/* Use new card option */}
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
                       onClick={() => setSelectedPaymentMethod(null)}
-                      className={`w-full flex items-center gap-3 p-4 rounded-lg border transition-colors ${
+                      className={`w-full h-auto flex items-center gap-3 p-4 transition-colors ${
                         selectedPaymentMethod === null
                           ? "border-[#d4af37] bg-[#d4af37]/10"
                           : "border-gray-700 bg-black/30 hover:border-gray-600"
@@ -818,7 +846,7 @@ function CheckoutContent() {
                       </div>
                       <CreditCard className="h-5 w-5 text-gray-400" />
                       <span className="text-white">Use a new card</span>
-                    </button>
+                    </Button>
                   </div>
                 )}
 

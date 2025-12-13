@@ -134,6 +134,9 @@ func (s *showService) GetShowByID(ctx context.Context, id string) (*domain.Show,
 
 // ListShowsByEvent lists shows for an event
 func (s *showService) ListShowsByEvent(ctx context.Context, eventID string, filter *dto.ShowListFilter) ([]*domain.Show, int, error) {
+	if filter == nil {
+		filter = &dto.ShowListFilter{}
+	}
 	filter.SetDefaults()
 
 	// Verify event exists

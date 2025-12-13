@@ -199,3 +199,57 @@ func (s *paymentServiceImpl) CancelPayment(ctx context.Context, paymentID string
 
 	return payment, nil
 }
+
+// CompletePaymentFromWebhook marks payment as completed from Stripe webhook
+// This is called when payment_intent.succeeded webhook is received
+func (s *paymentServiceImpl) CompletePaymentFromWebhook(ctx context.Context, paymentID string, gatewayPaymentID string) (*domain.Payment, error) {
+	// Get payment
+	payment, err := s.repo.GetByID(ctx, paymentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get payment: %w", err)
+	}
+
+	// Skip if already in final state
+	if payment.IsFinal() {
+		return payment, nil
+	}
+
+	// Complete payment directly (no gateway call needed - Stripe already processed it)
+	if err := payment.Complete(gatewayPaymentID); err != nil {
+		return nil, fmt.Errorf("failed to complete payment: %w", err)
+	}
+
+	// Update in repository
+	if err := s.repo.Update(ctx, payment); err != nil {
+		return nil, fmt.Errorf("failed to update payment: %w", err)
+	}
+
+	return payment, nil
+}
+
+// FailPaymentFromWebhook marks payment as failed from Stripe webhook
+// This is called when payment_intent.payment_failed webhook is received
+func (s *paymentServiceImpl) FailPaymentFromWebhook(ctx context.Context, paymentID string, errorCode string, errorMessage string) (*domain.Payment, error) {
+	// Get payment
+	payment, err := s.repo.GetByID(ctx, paymentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get payment: %w", err)
+	}
+
+	// Skip if already in final state
+	if payment.IsFinal() {
+		return payment, nil
+	}
+
+	// Fail payment
+	if err := payment.Fail(errorCode, errorMessage); err != nil {
+		return nil, fmt.Errorf("failed to mark payment as failed: %w", err)
+	}
+
+	// Update in repository
+	if err := s.repo.Update(ctx, payment); err != nil {
+		return nil, fmt.Errorf("failed to update payment: %w", err)
+	}
+
+	return payment, nil
+}

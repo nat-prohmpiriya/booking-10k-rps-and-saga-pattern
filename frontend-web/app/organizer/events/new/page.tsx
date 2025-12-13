@@ -10,6 +10,8 @@ import { ArrowLeft, Plus, Trash2, Calendar, Clock } from "lucide-react"
 import Link from "next/link"
 import { apiClient } from "@/lib/api/client"
 import { DatePicker } from "@/components/ui/date-picker"
+import { DateTimePicker } from "@/components/ui/datetime-picker"
+import { TimePicker } from "@/components/ui/time-picker"
 import { Textarea } from "@/components/ui/textarea"
 import { format } from "date-fns"
 
@@ -313,20 +315,18 @@ export default function CreateEventPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="booking_start_at">Booking Start</Label>
-                <Input
-                  id="booking_start_at"
-                  type="datetime-local"
+                <DateTimePicker
                   value={eventData.booking_start_at}
-                  onChange={(e) => handleEventChange("booking_start_at", e.target.value)}
+                  onChange={(value) => handleEventChange("booking_start_at", value)}
+                  placeholder="Select start date & time"
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="booking_end_at">Booking End</Label>
-                <Input
-                  id="booking_end_at"
-                  type="datetime-local"
+                <DateTimePicker
                   value={eventData.booking_end_at}
-                  onChange={(e) => handleEventChange("booking_end_at", e.target.value)}
+                  onChange={(value) => handleEventChange("booking_end_at", value)}
+                  placeholder="Select end date & time"
                 />
               </div>
             </div>
@@ -385,18 +385,18 @@ export default function CreateEventPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Start Time</Label>
-                    <Input
-                      type="time"
+                    <TimePicker
                       value={show.start_time}
-                      onChange={(e) => handleShowChange(showIndex, "start_time", e.target.value)}
+                      onChange={(value) => handleShowChange(showIndex, "start_time", value)}
+                      placeholder="Start time"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>End Time</Label>
-                    <Input
-                      type="time"
+                    <TimePicker
                       value={show.end_time}
-                      onChange={(e) => handleShowChange(showIndex, "end_time", e.target.value)}
+                      onChange={(value) => handleShowChange(showIndex, "end_time", value)}
+                      placeholder="End time"
                     />
                   </div>
                 </div>

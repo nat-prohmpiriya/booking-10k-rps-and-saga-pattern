@@ -25,6 +25,13 @@ type PaymentService interface {
 	// ProcessPayment processes a payment by ID
 	ProcessPayment(ctx context.Context, paymentID string) (*domain.Payment, error)
 
+	// CompletePaymentFromWebhook marks payment as completed from Stripe webhook
+	// This should be called when payment_intent.succeeded webhook is received
+	CompletePaymentFromWebhook(ctx context.Context, paymentID string, gatewayPaymentID string) (*domain.Payment, error)
+
+	// FailPaymentFromWebhook marks payment as failed from Stripe webhook
+	FailPaymentFromWebhook(ctx context.Context, paymentID string, errorCode string, errorMessage string) (*domain.Payment, error)
+
 	// GetPayment retrieves a payment by ID
 	GetPayment(ctx context.Context, paymentID string) (*domain.Payment, error)
 

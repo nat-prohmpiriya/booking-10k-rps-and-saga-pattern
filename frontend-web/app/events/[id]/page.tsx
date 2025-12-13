@@ -10,6 +10,7 @@ import { CountdownTimer } from "@/components/event-detail/countdown-timer"
 import { Header } from "@/components/header"
 import { useEventDetail, type TicketZoneDisplay } from "@/hooks/use-events"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
 
 export default function EventDetailPage() {
   const params = useParams()
@@ -139,15 +140,16 @@ export default function EventDetailPage() {
                 <h3 className="text-lg font-semibold mb-4">Select Show</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   {shows.map((show) => (
-                    <button
+                    <Button
                       key={show.id}
+                      variant="outline"
                       onClick={() => {
                         setSelectedShow(show)
                         setSelectedTickets({}) // Reset ticket selection
                       }}
-                      className={`p-4 rounded-lg border-2 transition-all ${
+                      className={`h-auto p-4 flex flex-col items-start justify-start transition-all ${
                         selectedShow?.id === show.id
-                          ? "border-[#d4af37] bg-[#d4af37]/10"
+                          ? "border-[#d4af37] bg-[#d4af37]/10 border-2"
                           : "border-zinc-700 hover:border-zinc-500"
                       }`}
                     >
@@ -156,7 +158,7 @@ export default function EventDetailPage() {
                       <div className="text-sm text-zinc-400">
                         {new Date(show.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
                       </div>
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </div>

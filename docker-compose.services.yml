@@ -149,8 +149,6 @@ services:
       - NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
     volumes:
       - ./frontend-web:/app
-      - /app/node_modules
-      - /app/.next
     depends_on:
       - api-gateway
     networks:

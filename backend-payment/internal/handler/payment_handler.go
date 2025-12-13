@@ -387,17 +387,19 @@ func (h *PaymentHandler) ConfirmPaymentIntent(c *gin.Context) {
 
 	// If Stripe says succeeded, process our payment
 	if intentResp.Status == "succeeded" {
-		payment, err = h.paymentService.ProcessPayment(c.Request.Context(), req.PaymentID)
+		processedPayment, err := h.paymentService.ProcessPayment(c.Request.Context(), req.PaymentID)
 		if err != nil {
-			// Try to complete directly if already processing
+			// ProcessPayment failed, return current payment status
 			c.JSON(http.StatusOK, dto.NewSuccessResponse(map[string]interface{}{
-				"payment_id":        payment.ID,
+				"payment_id":        req.PaymentID,
 				"status":            payment.Status,
 				"payment_intent_id": req.PaymentIntentID,
 				"stripe_status":     intentResp.Status,
+				"error":             err.Error(),
 			}))
 			return
 		}
+		payment = processedPayment
 	}
 
 	c.JSON(http.StatusOK, dto.NewSuccessResponse(map[string]interface{}{
