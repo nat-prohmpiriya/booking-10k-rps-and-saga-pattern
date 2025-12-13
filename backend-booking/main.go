@@ -169,6 +169,7 @@ func main() {
 			EstimatedWaitPerUser: 3, // 3 seconds per user
 			JWTSecret:            cfg.JWT.Secret,
 		},
+		TicketServiceURL: cfg.Services.TicketServiceURL, // For auto-sync zone on ZONE_NOT_FOUND
 	})
 
 	// Setup Gin with optimized settings

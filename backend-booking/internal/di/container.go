@@ -43,6 +43,7 @@ type ContainerConfig struct {
 	EventPublisher     service.EventPublisher
 	ServiceConfig      *service.BookingServiceConfig
 	QueueServiceConfig *service.QueueServiceConfig
+	TicketServiceURL   string // URL of ticket service for zone sync
 }
 
 // NewContainer creates a new dependency injection container
@@ -56,11 +57,19 @@ func NewContainer(cfg *ContainerConfig) *Container {
 		EventPublisher:  cfg.EventPublisher,
 	}
 
+	// Initialize zone syncer for auto-sync on ZONE_NOT_FOUND
+	var zoneSyncer service.ZoneSyncer
+	if cfg.TicketServiceURL != "" {
+		zoneFetcher := service.NewHTTPZoneFetcher(cfg.TicketServiceURL)
+		zoneSyncer = service.NewZoneSyncer(zoneFetcher, c.ReservationRepo)
+	}
+
 	// Initialize services
 	c.BookingService = service.NewBookingService(
 		c.BookingRepo,
 		c.ReservationRepo,
 		c.EventPublisher,
+		zoneSyncer,
 		cfg.ServiceConfig,
 	)
 
