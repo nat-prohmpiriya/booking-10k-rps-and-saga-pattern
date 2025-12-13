@@ -38,6 +38,7 @@ type ContainerConfig struct {
 	PaymentGateway       gateway.PaymentGateway
 	ServiceConfig        *service.PaymentServiceConfig
 	StripeWebhookSecret  string
+	AuthServiceURL       string
 }
 
 // NewContainer creates a new dependency injection container
@@ -55,7 +56,7 @@ func NewContainer(cfg *ContainerConfig) *Container {
 	// Initialize PaymentService if repository and gateway are provided
 	if c.PaymentRepo != nil && c.PaymentGateway != nil {
 		c.PaymentService = service.NewPaymentService(c.PaymentRepo, c.PaymentGateway, cfg.ServiceConfig)
-		c.PaymentHandler = handler.NewPaymentHandler(c.PaymentService, c.PaymentGateway)
+		c.PaymentHandler = handler.NewPaymentHandler(c.PaymentService, c.PaymentGateway, cfg.AuthServiceURL)
 
 		// Initialize WebhookHandler if webhook secret is provided
 		if cfg.StripeWebhookSecret != "" {

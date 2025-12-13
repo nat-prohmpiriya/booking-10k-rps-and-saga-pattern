@@ -17,4 +17,3 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX idx_sessions_refresh_token ON sessions(refresh_token);
 CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
-CREATE INDEX idx_sessions_expired ON sessions(expires_at) WHERE expires_at < NOW();

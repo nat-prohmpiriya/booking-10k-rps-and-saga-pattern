@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
@@ -22,13 +21,15 @@ import (
 type PaymentHandler struct {
 	paymentService service.PaymentService
 	paymentGateway gateway.PaymentGateway
+	authServiceURL string
 }
 
 // NewPaymentHandler creates a new PaymentHandler
-func NewPaymentHandler(paymentService service.PaymentService, paymentGateway gateway.PaymentGateway) *PaymentHandler {
+func NewPaymentHandler(paymentService service.PaymentService, paymentGateway gateway.PaymentGateway, authServiceURL string) *PaymentHandler {
 	return &PaymentHandler{
 		paymentService: paymentService,
 		paymentGateway: paymentGateway,
+		authServiceURL: authServiceURL,
 	}
 }
 
@@ -409,12 +410,7 @@ func (h *PaymentHandler) CreatePortalSession(c *gin.Context) {
 	}
 
 	// Get Stripe Customer ID from Auth Service
-	authServiceURL := os.Getenv("AUTH_SERVICE_URL")
-	if authServiceURL == "" {
-		authServiceURL = "http://localhost:8081"
-	}
-
-	stripeCustomerID, err := h.getStripeCustomerID(authServiceURL, userID)
+	stripeCustomerID, err := h.getStripeCustomerID(h.authServiceURL, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.NewErrorResponse("AUTH_SERVICE_ERROR", err.Error()))
 		return
@@ -433,7 +429,7 @@ func (h *PaymentHandler) CreatePortalSession(c *gin.Context) {
 		stripeCustomerID = customerResp.CustomerID
 
 		// Save the Stripe Customer ID to Auth Service
-		if err := h.updateStripeCustomerID(authServiceURL, userID, stripeCustomerID); err != nil {
+		if err := h.updateStripeCustomerID(h.authServiceURL, userID, stripeCustomerID); err != nil {
 			// Log the error but continue - portal will still work
 			fmt.Printf("Failed to save Stripe Customer ID: %v\n", err)
 		}
@@ -533,12 +529,7 @@ func (h *PaymentHandler) ListPaymentMethods(c *gin.Context) {
 	}
 
 	// Get Stripe Customer ID from Auth Service
-	authServiceURL := os.Getenv("AUTH_SERVICE_URL")
-	if authServiceURL == "" {
-		authServiceURL = "http://localhost:8081"
-	}
-
-	stripeCustomerID, err := h.getStripeCustomerID(authServiceURL, userID)
+	stripeCustomerID, err := h.getStripeCustomerID(h.authServiceURL, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.NewErrorResponse("AUTH_SERVICE_ERROR", err.Error()))
 		return

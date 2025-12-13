@@ -194,7 +194,7 @@ func setupTestRouter(svc service.PaymentService) *gin.Engine {
 	router := gin.New()
 
 	gw := newMockPaymentGateway()
-	handler := NewPaymentHandler(svc, gw)
+	handler := NewPaymentHandler(svc, gw, "http://localhost:8081")
 	payments := router.Group("/api/v1/payments")
 	{
 		payments.POST("", handler.CreatePayment)

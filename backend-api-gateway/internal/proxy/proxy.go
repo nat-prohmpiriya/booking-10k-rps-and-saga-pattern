@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -259,8 +260,20 @@ func isConnectionError(err error) bool {
 		strings.Contains(err.Error(), "no such host")
 }
 
-// DefaultConfig returns default proxy configuration
+// getEnvOrDefault returns environment variable value or default
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// DefaultConfig returns default proxy configuration (reads from environment variables)
 func DefaultConfig() ProxyConfig {
+	authURL := getEnvOrDefault("AUTH_SERVICE_URL", "http://localhost:8081")
+	ticketURL := getEnvOrDefault("TICKET_SERVICE_URL", "http://localhost:8082")
+	bookingURL := getEnvOrDefault("BOOKING_SERVICE_URL", "http://localhost:8083")
+
 	return ProxyConfig{
 		DefaultTimeout: 30 * time.Second,
 		Routes: []RouteConfig{
@@ -270,7 +283,7 @@ func DefaultConfig() ProxyConfig {
 				StripPrefix: "",
 				Service: ServiceConfig{
 					Name:    "auth-service",
-					BaseURL: "http://localhost:8081",
+					BaseURL: authURL,
 					Timeout: 10 * time.Second,
 				},
 				RequireAuth: false,
@@ -281,7 +294,7 @@ func DefaultConfig() ProxyConfig {
 				StripPrefix: "",
 				Service: ServiceConfig{
 					Name:    "ticket-service",
-					BaseURL: "http://localhost:8082",
+					BaseURL: ticketURL,
 					Timeout: 15 * time.Second,
 				},
 				RequireAuth:    false, // GET is public, POST/PUT/DELETE will have JWT middleware
@@ -292,7 +305,7 @@ func DefaultConfig() ProxyConfig {
 				StripPrefix: "",
 				Service: ServiceConfig{
 					Name:    "ticket-service",
-					BaseURL: "http://localhost:8082",
+					BaseURL: ticketURL,
 					Timeout: 15 * time.Second,
 				},
 				RequireAuth:    true,
@@ -304,7 +317,7 @@ func DefaultConfig() ProxyConfig {
 				StripPrefix: "",
 				Service: ServiceConfig{
 					Name:    "booking-service",
-					BaseURL: "http://localhost:8083",
+					BaseURL: bookingURL,
 					Timeout: 30 * time.Second, // Longer timeout for booking operations
 				},
 				RequireAuth: true,
@@ -315,7 +328,7 @@ func DefaultConfig() ProxyConfig {
 				StripPrefix: "",
 				Service: ServiceConfig{
 					Name:    "auth-service",
-					BaseURL: "http://localhost:8081",
+					BaseURL: authURL,
 					Timeout: 10 * time.Second,
 				},
 				RequireAuth: true,

@@ -167,6 +167,12 @@ func main() {
 		appLog.Info("Stripe webhook secret configured")
 	}
 
+	// Get Auth Service URL from environment
+	authServiceURL := os.Getenv("AUTH_SERVICE_URL")
+	if authServiceURL == "" {
+		authServiceURL = "http://localhost:8081"
+	}
+
 	// Build dependency injection container
 	container := di.NewContainer(&di.ContainerConfig{
 		DB:                  db,
@@ -174,6 +180,7 @@ func main() {
 		PaymentRepo:         paymentRepo,
 		PaymentGateway:      paymentGateway,
 		StripeWebhookSecret: stripeWebhookSecret,
+		AuthServiceURL:      authServiceURL,
 		ServiceConfig: &service.PaymentServiceConfig{
 			Currency:        "THB",
 			GatewayType:     gatewayType,
