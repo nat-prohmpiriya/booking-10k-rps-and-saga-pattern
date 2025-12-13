@@ -9,6 +9,51 @@ import type {
   ShowZoneListResponse,
 } from "./types"
 
+// Update Event Request type
+export interface UpdateEventRequest {
+  name?: string
+  description?: string
+  short_description?: string
+  poster_url?: string
+  banner_url?: string
+  venue_name?: string
+  venue_address?: string
+  city?: string
+  country?: string
+  max_tickets_per_user?: number
+  booking_start_at?: string
+  booking_end_at?: string
+  is_featured?: boolean
+  is_public?: boolean
+}
+
+// Update Show Request type
+export interface UpdateShowRequest {
+  name?: string
+  show_date?: string
+  start_time?: string
+  end_time?: string
+  doors_open_at?: string
+  status?: string
+  sale_start_at?: string
+  sale_end_at?: string
+}
+
+// Update Zone Request type
+export interface UpdateZoneRequest {
+  name?: string
+  description?: string
+  color?: string
+  price?: number
+  total_seats?: number
+  min_per_order?: number
+  max_per_order?: number
+  is_active?: boolean
+  sort_order?: number
+  sale_start_at?: string
+  sale_end_at?: string
+}
+
 export const eventsApi = {
   async list(filter?: EventListFilter): Promise<EventListResponse> {
     const params = new URLSearchParams()
@@ -34,6 +79,21 @@ export const eventsApi = {
   // Alias for getById - used by checkout page
   async getEvent(eventId: string): Promise<EventResponse> {
     return apiClient.get<EventResponse>(`/events/id/${eventId}`)
+  },
+
+  // Update an event
+  async update(id: string, data: UpdateEventRequest): Promise<EventResponse> {
+    return apiClient.put<EventResponse>(`/events/${id}`, data)
+  },
+
+  // Delete an event
+  async delete(id: string): Promise<void> {
+    return apiClient.delete(`/events/${id}`)
+  },
+
+  // Publish an event
+  async publish(id: string): Promise<EventResponse> {
+    return apiClient.post<EventResponse>(`/events/${id}/publish`)
   },
 
   // Get shows for an event by slug
@@ -74,6 +134,14 @@ export const showsApi = {
   async getById(showId: string): Promise<ShowResponse> {
     return apiClient.get<ShowResponse>(`/shows/${showId}`)
   },
+
+  async update(showId: string, data: UpdateShowRequest): Promise<ShowResponse> {
+    return apiClient.put<ShowResponse>(`/shows/${showId}`, data)
+  },
+
+  async delete(showId: string): Promise<void> {
+    return apiClient.delete(`/shows/${showId}`)
+  },
 }
 
 export const zonesApi = {
@@ -91,5 +159,13 @@ export const zonesApi = {
 
   async getById(zoneId: string): Promise<ShowZoneResponse> {
     return apiClient.get<ShowZoneResponse>(`/zones/${zoneId}`)
+  },
+
+  async update(zoneId: string, data: UpdateZoneRequest): Promise<ShowZoneResponse> {
+    return apiClient.put<ShowZoneResponse>(`/zones/${zoneId}`, data)
+  },
+
+  async delete(zoneId: string): Promise<void> {
+    return apiClient.delete(`/zones/${zoneId}`)
   },
 }
