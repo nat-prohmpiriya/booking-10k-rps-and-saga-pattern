@@ -153,15 +153,15 @@ func main() {
 		{
 			// Public endpoints (no auth required)
 			events.GET("", container.EventHandler.List)
-			events.GET("/id/:id", container.EventHandler.GetByID)
-			events.GET("/:slug/shows", container.ShowHandler.ListByEvent)
+			events.GET("/slug/:slug", container.EventHandler.GetBySlug)
+			events.GET("/slug/:slug/shows", container.ShowHandler.ListByEvent)
 
 			// Protected endpoints (Organizer/Admin only)
 			protected := events.Group("")
 			protected.Use(middleware.JWTMiddleware(jwtConfig))
 			protected.Use(middleware.RequireRole("admin", "organizer"))
 			{
-				protected.GET("/my", container.EventHandler.ListMyEvents) // Must be before /:slug
+				protected.GET("/my", container.EventHandler.ListMyEvents)
 				protected.POST("", container.EventHandler.Create)
 				protected.PUT("/:id", container.EventHandler.Update)
 				protected.DELETE("/:id", container.EventHandler.Delete)
@@ -169,8 +169,8 @@ func main() {
 				protected.POST("/:id/shows", container.ShowHandler.Create)
 			}
 
-			// This must be last to avoid catching /id/:id, /my, etc.
-			events.GET("/:slug", container.EventHandler.GetBySlug)
+			// RESTful: GET /events/:id returns event by UUID
+			events.GET("/:id", container.EventHandler.GetByID)
 		}
 
 		// Shows endpoints - for direct show access

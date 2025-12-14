@@ -121,6 +121,25 @@ func (m *MockEventService) AddEvent(event *domain.Event) {
 	m.events[event.ID] = event
 }
 
+// MockShowServiceForEvent is a minimal mock for ShowService used in event handler tests
+type MockShowServiceForEvent struct{}
+
+func (m *MockShowServiceForEvent) CreateShow(ctx context.Context, req *dto.CreateShowRequest) (*domain.Show, error) {
+	return nil, nil
+}
+func (m *MockShowServiceForEvent) GetShowByID(ctx context.Context, id string) (*domain.Show, error) {
+	return nil, nil
+}
+func (m *MockShowServiceForEvent) ListShowsByEvent(ctx context.Context, eventID string, filter *dto.ShowListFilter) ([]*domain.Show, int, error) {
+	return []*domain.Show{}, 0, nil
+}
+func (m *MockShowServiceForEvent) UpdateShow(ctx context.Context, id string, req *dto.UpdateShowRequest) (*domain.Show, error) {
+	return nil, nil
+}
+func (m *MockShowServiceForEvent) DeleteShow(ctx context.Context, id string) error {
+	return nil
+}
+
 func setupRouter(h *EventHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -128,8 +147,8 @@ func setupRouter(h *EventHandler) *gin.Engine {
 	events := router.Group("/events")
 	{
 		events.GET("", h.List)
-		events.GET("/:slug", h.GetBySlug)
-		events.GET("/id/:id", h.GetByID)
+		events.GET("/slug/:slug", h.GetBySlug)
+		events.GET("/:id", h.GetByID)
 		events.POST("", h.Create)
 		events.PUT("/:id", h.Update)
 		events.DELETE("/:id", h.Delete)
@@ -141,7 +160,7 @@ func setupRouter(h *EventHandler) *gin.Engine {
 
 func TestEventHandler_List(t *testing.T) {
 	mockSvc := NewMockEventService()
-	handler := NewEventHandler(mockSvc)
+	handler := NewEventHandler(mockSvc, &MockShowServiceForEvent{})
 	router := setupRouter(handler)
 
 	// Add test event
@@ -166,7 +185,7 @@ func TestEventHandler_List(t *testing.T) {
 
 func TestEventHandler_GetBySlug(t *testing.T) {
 	mockSvc := NewMockEventService()
-	handler := NewEventHandler(mockSvc)
+	handler := NewEventHandler(mockSvc, &MockShowServiceForEvent{})
 	router := setupRouter(handler)
 
 	// Add test event
@@ -199,7 +218,7 @@ func TestEventHandler_GetBySlug(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest(http.MethodGet, "/events/"+tt.slug, nil)
+			req, _ := http.NewRequest(http.MethodGet, "/events/slug/"+tt.slug, nil)
 			resp := httptest.NewRecorder()
 			router.ServeHTTP(resp, req)
 
@@ -212,7 +231,7 @@ func TestEventHandler_GetBySlug(t *testing.T) {
 
 func TestEventHandler_GetByID(t *testing.T) {
 	mockSvc := NewMockEventService()
-	handler := NewEventHandler(mockSvc)
+	handler := NewEventHandler(mockSvc, &MockShowServiceForEvent{})
 	router := setupRouter(handler)
 
 	// Add test event
@@ -245,7 +264,7 @@ func TestEventHandler_GetByID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest(http.MethodGet, "/events/id/"+tt.id, nil)
+			req, _ := http.NewRequest(http.MethodGet, "/events/"+tt.id, nil)
 			resp := httptest.NewRecorder()
 			router.ServeHTTP(resp, req)
 
@@ -258,15 +277,16 @@ func TestEventHandler_GetByID(t *testing.T) {
 
 func TestEventHandler_Create(t *testing.T) {
 	mockSvc := NewMockEventService()
-	handler := NewEventHandler(mockSvc)
+	handler := NewEventHandler(mockSvc, &MockShowServiceForEvent{})
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	events := router.Group("/events")
 	{
-		// Simulate JWT middleware setting tenant_id
+		// Simulate JWT middleware setting tenant_id and user_id
 		events.POST("", func(c *gin.Context) {
 			c.Set(middleware.ContextKeyTenantID, "tenant-1")
+			c.Set(middleware.ContextKeyUserID, "user-1")
 			c.Next()
 		}, handler.Create)
 	}
@@ -314,7 +334,7 @@ func TestEventHandler_Create(t *testing.T) {
 
 func TestEventHandler_Update(t *testing.T) {
 	mockSvc := NewMockEventService()
-	handler := NewEventHandler(mockSvc)
+	handler := NewEventHandler(mockSvc, &MockShowServiceForEvent{})
 	router := setupRouter(handler)
 
 	// Add test event
@@ -346,7 +366,7 @@ func TestEventHandler_Update(t *testing.T) {
 			name:       "empty update",
 			id:         "event-1",
 			body:       map[string]interface{}{},
-			wantStatus: http.StatusBadRequest,
+			wantStatus: http.StatusOK, // Empty update is valid, just no changes
 		},
 		{
 			name: "non-existent event",
@@ -375,7 +395,7 @@ func TestEventHandler_Update(t *testing.T) {
 
 func TestEventHandler_Delete(t *testing.T) {
 	mockSvc := NewMockEventService()
-	handler := NewEventHandler(mockSvc)
+	handler := NewEventHandler(mockSvc, &MockShowServiceForEvent{})
 	router := setupRouter(handler)
 
 	// Add test event
@@ -421,7 +441,7 @@ func TestEventHandler_Delete(t *testing.T) {
 
 func TestEventHandler_Publish(t *testing.T) {
 	mockSvc := NewMockEventService()
-	handler := NewEventHandler(mockSvc)
+	handler := NewEventHandler(mockSvc, &MockShowServiceForEvent{})
 	router := setupRouter(handler)
 
 	// Add test events

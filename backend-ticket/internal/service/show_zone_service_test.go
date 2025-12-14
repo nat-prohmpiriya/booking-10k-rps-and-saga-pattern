@@ -33,10 +33,14 @@ func (m *MockShowZoneRepository) GetByID(ctx context.Context, id string) (*domai
 	return zone, nil
 }
 
-func (m *MockShowZoneRepository) GetByShowID(ctx context.Context, showID string, limit, offset int) ([]*domain.ShowZone, int, error) {
+func (m *MockShowZoneRepository) GetByShowID(ctx context.Context, showID string, isActive *bool, limit, offset int) ([]*domain.ShowZone, int, error) {
 	var zones []*domain.ShowZone
 	for _, z := range m.zones {
 		if z.ShowID == showID && z.DeletedAt == nil {
+			// Filter by isActive if provided
+			if isActive != nil && z.IsActive != *isActive {
+				continue
+			}
 			zones = append(zones, z)
 		}
 	}

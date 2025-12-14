@@ -60,7 +60,7 @@ func (h *EventHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, response.Paginated(eventResponses, offset/limit+1, limit, int64(total)))
 }
 
-// GetBySlug handles GET /events/:slug - retrieves an event by slug
+// GetBySlug handles GET /events/slug/:slug - retrieves an event by slug
 // For non-published events, only the owner can view
 func (h *EventHandler) GetBySlug(c *gin.Context) {
 	slug := c.Param("slug")
@@ -95,7 +95,7 @@ func (h *EventHandler) GetBySlug(c *gin.Context) {
 	c.JSON(http.StatusOK, response.Success(toEventResponse(event, saleStatus)))
 }
 
-// GetByID handles GET /events/id/:id - retrieves an event by ID
+// GetByID handles GET /events/:id - retrieves an event by ID (UUID)
 // For non-published events, only the owner can view
 func (h *EventHandler) GetByID(c *gin.Context) {
 	id := c.Param("id")
