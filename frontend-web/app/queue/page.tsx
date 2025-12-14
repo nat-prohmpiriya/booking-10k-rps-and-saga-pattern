@@ -313,7 +313,7 @@ function QueueWaitingRoomContent() {
           <div className="py-8">
             <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-[#d4af37] to-[#f4d03f]"
+                className="h-full bg-linear-to-r from-[#d4af37] to-[#f4d03f]"
                 style={{
                   width: "100%",
                   animation: "shimmer 2s ease-in-out infinite",
@@ -348,7 +348,7 @@ function QueueWaitingRoomContent() {
 
         {/* Order Summary Card */}
         {Object.keys(selectedTickets).length > 0 && (
-          <Card className="bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f] border-[#d4af37]/20 p-6 md:p-8">
+          <Card className="bg-linear-to-br from-[#1a1a1a] to-[#0f0f0f] border-[#d4af37]/20 p-6 md:p-8">
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-[#d4af37] animate-pulse" />

@@ -173,7 +173,7 @@ function BookingConfirmationContent() {
               {/* Gold glow effect */}
               <div className="absolute inset-0 rounded-full bg-[#d4af37] opacity-20 blur-xl animate-pulse" />
               <div className="relative w-16 h-16 rounded-full bg-[#d4af37] flex items-center justify-center">
-                <Check className="w-10 h-10 text-[#0a0a0a] stroke-[3]" />
+                <Check className="w-10 h-10 text-[#0a0a0a] stroke-3" />
               </div>
             </div>
           </div>
