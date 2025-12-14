@@ -109,6 +109,12 @@ func (h *WebhookHandler) handlePaymentIntentSucceeded(c *gin.Context, event stri
 		}
 	}
 
+	// Publish payment.success event to trigger post-payment saga
+	// This will confirm the booking and remove TTL from Redis
+	if bookingID != "" {
+		h.publishPaymentSuccessEvent(c.Request.Context(), bookingID, paymentID, paymentIntent.ID, paymentIntent.Amount, string(paymentIntent.Currency))
+	}
+
 	c.JSON(http.StatusOK, gin.H{"received": true})
 }
 
@@ -244,4 +250,32 @@ func (h *WebhookHandler) publishSeatReleaseEvent(ctx context.Context, bookingID,
 	}
 
 	log.Info(fmt.Sprintf("Published seat release event: booking_id=%s, reason=%s", bookingID, reason))
+}
+
+// publishPaymentSuccessEvent publishes a payment success event to Kafka
+// This triggers the post-payment saga to confirm booking and remove TTL
+func (h *WebhookHandler) publishPaymentSuccessEvent(ctx context.Context, bookingID, paymentID, stripePaymentIntentID string, amount int64, currency string) {
+	log := logger.Get()
+
+	if h.kafkaProducer == nil {
+		log.Warn("Kafka producer not configured, skipping payment success event")
+		return
+	}
+
+	event := &dto.PaymentSuccessEvent{
+		EventType:             "payment.success",
+		BookingID:             bookingID,
+		PaymentID:             paymentID,
+		StripePaymentIntentID: stripePaymentIntentID,
+		Amount:                amount,
+		Currency:              currency,
+		Timestamp:             time.Now().UTC(),
+	}
+
+	if err := h.kafkaProducer.ProduceJSON(ctx, dto.TopicPaymentSuccess, event.Key(), event, nil); err != nil {
+		log.Error(fmt.Sprintf("Failed to publish payment success event: %v", err))
+		return
+	}
+
+	log.Info(fmt.Sprintf("Published payment success event: booking_id=%s, payment_id=%s", bookingID, paymentID))
 }
