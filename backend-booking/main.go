@@ -36,11 +36,14 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Initialize logger
+	// Initialize logger with OTLP export support
 	logCfg := &logger.Config{
-		Level:       cfg.App.Environment,
-		ServiceName: "booking-service",
-		Development: cfg.IsDevelopment(),
+		Level:        cfg.App.Environment,
+		ServiceName:  "booking-service",
+		Development:  cfg.IsDevelopment(),
+		OTLPEnabled:  cfg.OTel.Enabled && cfg.OTel.LogExportEnabled,
+		OTLPEndpoint: cfg.OTel.CollectorAddr,
+		OTLPInsecure: true,
 	}
 	if err := logger.Init(logCfg); err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
@@ -149,7 +152,9 @@ func main() {
 		appLog.Warn(fmt.Sprintf("Saga producer init failed: %v", err))
 	} else {
 		appLog.Info("Saga producer connected")
-		sagaStore = pkgsaga.NewMemoryStore() // In-memory for now, can switch to Redis/Postgres
+		// Use PostgreSQL store for saga (durable storage, shared with saga-orchestrator)
+		sagaStore = pkgsaga.NewPostgresStore(db.Pool())
+		appLog.Info("Saga store initialized (PostgreSQL)")
 	}
 
 	// Initialize repositories
@@ -170,13 +175,11 @@ func main() {
 		appLog.Info("Queue Lua scripts pre-loaded into Redis")
 	}
 
-	// Check if saga mode is enabled via environment variable
-	useSagaForBooking := os.Getenv("USE_SAGA_FOR_BOOKING") == "true"
-	if useSagaForBooking && sagaProducer != nil {
-		appLog.Info("Saga mode ENABLED for booking - /bookings/reserve will use saga pattern")
-	} else {
-		appLog.Info("Saga mode DISABLED for booking - using direct sync flow")
-	}
+	// Booking flow architecture:
+	// - POST /bookings/reserve uses FAST PATH (Redis Lua + PostgreSQL) for 10K RPS
+	// - Saga is triggered ASYNC after payment success via Stripe webhook
+	// - Saga producer/store still needed for post-payment saga orchestration
+	appLog.Info("Booking service using FAST PATH for reservations (Redis Lua + PostgreSQL)")
 
 	// Build dependency injection container
 	container := di.NewContainer(&di.ContainerConfig{
@@ -196,10 +199,9 @@ func main() {
 			EstimatedWaitPerUser: 3, // 3 seconds per user
 			JWTSecret:            cfg.JWT.Secret,
 		},
-		TicketServiceURL:  cfg.Services.TicketServiceURL, // For auto-sync zone on ZONE_NOT_FOUND
-		SagaProducer:      sagaProducer,
-		SagaStore:         sagaStore,
-		UseSagaForBooking: useSagaForBooking, // Enable saga-based booking
+		TicketServiceURL: cfg.Services.TicketServiceURL, // For auto-sync zone on ZONE_NOT_FOUND
+		SagaProducer:     sagaProducer,                 // For post-payment saga
+		SagaStore:        sagaStore,                    // For saga state persistence
 		SagaServiceConfig: &service.SagaServiceConfig{
 			StepTimeout: 30 * time.Second,
 			MaxRetries:  2,
@@ -268,6 +270,7 @@ func main() {
 
 			// Read operations without idempotency
 			bookings.GET("", container.BookingHandler.GetUserBookings)
+			bookings.GET("/summary", container.BookingHandler.GetUserBookingSummary) // Must be before /:id
 			bookings.GET("/pending", container.BookingHandler.GetPendingBookings)
 			bookings.GET("/:id", container.BookingHandler.GetBooking)
 		}

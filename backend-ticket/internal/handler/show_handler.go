@@ -26,7 +26,7 @@ func NewShowHandler(showService service.ShowService, eventService service.EventS
 	}
 }
 
-// ListByEvent handles GET /events/:slug/shows - lists shows for an event by slug
+// ListByEvent handles GET /events/slug/:slug/shows - lists shows for an event by slug
 func (h *ShowHandler) ListByEvent(c *gin.Context) {
 	slug := c.Param("slug")
 	if slug == "" {

@@ -84,16 +84,16 @@ export const eventsApi = {
   },
 
   async getBySlug(slug: string): Promise<EventResponse> {
-    return apiClient.get<EventResponse>(`/events/${slug}`)
+    return apiClient.get<EventResponse>(`/events/slug/${slug}`)
   },
 
   async getById(id: string): Promise<EventResponse> {
-    return apiClient.get<EventResponse>(`/events/id/${id}`)
+    return apiClient.get<EventResponse>(`/events/${id}`)
   },
 
   // Alias for getById - used by checkout page
   async getEvent(eventId: string): Promise<EventResponse> {
-    return apiClient.get<EventResponse>(`/events/id/${eventId}`)
+    return apiClient.get<EventResponse>(`/events/${eventId}`)
   },
 
   // Update an event
@@ -113,16 +113,16 @@ export const eventsApi = {
 
   // Get shows for an event by slug
   async getEventShowsBySlug(slug: string): Promise<ShowResponse[]> {
-    const response = await apiClient.get<ShowListResponse>(`/events/${slug}/shows`)
+    const response = await apiClient.get<ShowListResponse>(`/events/slug/${slug}/shows`)
     return response.data
   },
 
   // Get shows for an event by ID (fetches event first to get slug)
   async getEventShows(eventId: string): Promise<ShowResponse[]> {
     // First get the event to obtain the slug
-    const event = await apiClient.get<EventResponse>(`/events/id/${eventId}`)
+    const event = await apiClient.get<EventResponse>(`/events/${eventId}`)
     // Then fetch shows using the slug
-    const response = await apiClient.get<ShowListResponse>(`/events/${event.slug}/shows`)
+    const response = await apiClient.get<ShowListResponse>(`/events/slug/${event.slug}/shows`)
     return response.data
   },
 
@@ -143,8 +143,8 @@ export const showsApi = {
 
     const queryString = params.toString()
     const endpoint = queryString
-      ? `/events/${eventSlug}/shows?${queryString}`
-      : `/events/${eventSlug}/shows`
+      ? `/events/slug/${eventSlug}/shows?${queryString}`
+      : `/events/slug/${eventSlug}/shows`
     return apiClient.get<ShowListResponse>(endpoint)
   },
 

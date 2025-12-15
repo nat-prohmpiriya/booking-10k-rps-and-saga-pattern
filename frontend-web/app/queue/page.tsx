@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, Suspense } from "react"
+import { useEffect, useState, useCallback, useRef, Suspense } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -26,8 +26,10 @@ function QueueWaitingRoomContent() {
   const [queueToken, setQueueToken] = useState<string>("")
   const [queuePass, setQueuePass] = useState<string>("")
   const [queuePassExpiresAt, setQueuePassExpiresAt] = useState<string>("")
+  const [passCountdown, setPassCountdown] = useState<number>(300) // 5 minutes default
   const [error, setError] = useState<string>("")
   const [dots, setDots] = useState("")
+  const hasJoinedRef = useRef(false)
 
   // Parse ticket selection
   const selectedTickets = ticketsParam ? JSON.parse(ticketsParam) : {}
@@ -40,6 +42,10 @@ function QueueWaitingRoomContent() {
       setQueueState("error")
       return
     }
+
+    // Prevent double call in Strict Mode (React 19)
+    if (hasJoinedRef.current) return
+    hasJoinedRef.current = true
 
     const joinQueue = async () => {
       try {
@@ -127,11 +133,44 @@ function QueueWaitingRoomContent() {
     return () => clearInterval(interval)
   }, [])
 
+  // Queue Pass countdown timer
+  useEffect(() => {
+    if (queueState !== "ready" || !queuePassExpiresAt) return
+
+    const calculateRemaining = () => {
+      const expiresAt = new Date(queuePassExpiresAt).getTime()
+      const now = Date.now()
+      const remaining = Math.max(0, Math.floor((expiresAt - now) / 1000))
+      setPassCountdown(remaining)
+      return remaining
+    }
+
+    // Initial calculation
+    calculateRemaining()
+
+    // Update every second
+    const interval = setInterval(() => {
+      const remaining = calculateRemaining()
+      if (remaining <= 0) {
+        clearInterval(interval)
+      }
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [queueState, queuePassExpiresAt])
+
   // Format estimated wait time
   const formatWaitTime = (seconds: number) => {
     if (seconds < 60) return `${seconds} seconds`
     const minutes = Math.ceil(seconds / 60)
     return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`
+  }
+
+  // Format countdown as MM:SS
+  const formatCountdown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
   // Leave queue handler
@@ -200,7 +239,9 @@ function QueueWaitingRoomContent() {
 
           <Card className="bg-[#1a1a1a] border-green-800/50 p-6">
             <p className="text-sm text-gray-400 mb-2">Your Queue Pass expires in</p>
-            <p className="text-2xl font-bold text-green-400">5:00</p>
+            <p className={`text-2xl font-bold ${passCountdown <= 60 ? "text-red-400 animate-pulse" : "text-green-400"}`}>
+              {formatCountdown(passCountdown)}
+            </p>
             <p className="text-xs text-gray-500 mt-2">Complete your booking before it expires</p>
           </Card>
         </div>
@@ -272,7 +313,7 @@ function QueueWaitingRoomContent() {
           <div className="py-8">
             <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-[#d4af37] to-[#f4d03f]"
+                className="h-full bg-linear-to-r from-[#d4af37] to-[#f4d03f]"
                 style={{
                   width: "100%",
                   animation: "shimmer 2s ease-in-out infinite",
@@ -307,7 +348,7 @@ function QueueWaitingRoomContent() {
 
         {/* Order Summary Card */}
         {Object.keys(selectedTickets).length > 0 && (
-          <Card className="bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f] border-[#d4af37]/20 p-6 md:p-8">
+          <Card className="bg-linear-to-br from-[#1a1a1a] to-[#0f0f0f] border-[#d4af37]/20 p-6 md:p-8">
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-[#d4af37] animate-pulse" />
