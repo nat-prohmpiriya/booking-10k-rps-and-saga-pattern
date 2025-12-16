@@ -182,6 +182,17 @@ func main() {
 	appLog.Info("Booking service using FAST PATH for reservations (Redis Lua + PostgreSQL)")
 
 	// Build dependency injection container
+	// Use config values for MaxPerUser and ReservationTTL (from env: MAX_TICKETS_PER_USER, RESERVATION_TTL_MINUTES)
+	maxPerUser := cfg.Booking.MaxTicketsPerUser
+	if maxPerUser <= 0 {
+		maxPerUser = 10 // Default fallback
+	}
+	reservationTTL := time.Duration(cfg.Booking.ReservationTTLMinutes) * time.Minute
+	if reservationTTL <= 0 {
+		reservationTTL = 10 * time.Minute // Default fallback
+	}
+	appLog.Info(fmt.Sprintf("Booking config: MaxPerUser=%d, ReservationTTL=%v", maxPerUser, reservationTTL))
+
 	container := di.NewContainer(&di.ContainerConfig{
 		DB:              db,
 		Redis:           redisClient,
@@ -190,8 +201,8 @@ func main() {
 		QueueRepo:       queueRepo,
 		EventPublisher:  eventPublisher,
 		ServiceConfig: &service.BookingServiceConfig{
-			ReservationTTL: 10 * time.Minute,
-			MaxPerUser:     10,
+			ReservationTTL: reservationTTL,
+			MaxPerUser:     maxPerUser,
 		},
 		QueueServiceConfig: &service.QueueServiceConfig{
 			QueueTTL:             30 * time.Minute,
