@@ -9,6 +9,9 @@ import (
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-booking/internal/domain"
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-booking/internal/dto"
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-booking/internal/service"
+	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // BookingHandler handles booking HTTP requests
@@ -30,8 +33,13 @@ func NewBookingHandler(bookingService service.BookingService) *BookingHandler {
 // Returns immediately with booking_id (< 50ms target latency)
 // Payment and confirmation are handled asynchronously via Stripe webhook → Saga
 func (h *BookingHandler) ReserveSeats(c *gin.Context) {
+	ctx, span := telemetry.StartSpan(c.Request.Context(), "handler.booking.reserve")
+	defer span.End()
+	c.Request = c.Request.WithContext(ctx)
+
 	userID := c.GetString("user_id")
 	if userID == "" {
+		span.SetStatus(codes.Error, "unauthorized")
 		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
 			Error: "unauthorized",
 			Code:  "UNAUTHORIZED",
@@ -41,6 +49,8 @@ func (h *BookingHandler) ReserveSeats(c *gin.Context) {
 
 	var req dto.ReserveSeatsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "invalid request")
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
 			Error:   "invalid request",
 			Code:    "INVALID_REQUEST",
@@ -54,20 +64,37 @@ func (h *BookingHandler) ReserveSeats(c *gin.Context) {
 		req.TenantID = c.GetString("tenant_id")
 	}
 
+	span.SetAttributes(
+		attribute.String("user_id", userID),
+		attribute.String("event_id", req.EventID),
+		attribute.String("zone_id", req.ZoneID),
+		attribute.String("show_id", req.ShowID),
+		attribute.Int("quantity", req.Quantity),
+	)
+
 	// Fast path: Redis Lua (atomic) + PostgreSQL
-	result, err := h.bookingService.ReserveSeats(c.Request.Context(), userID, &req)
+	result, err := h.bookingService.ReserveSeats(ctx, userID, &req)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		h.handleError(c, err)
 		return
 	}
 
+	span.SetAttributes(attribute.String("booking_id", result.BookingID))
+	span.SetStatus(codes.Ok, "")
 	c.JSON(http.StatusCreated, result)
 }
 
 // ConfirmBooking handles POST /bookings/:id/confirm
 func (h *BookingHandler) ConfirmBooking(c *gin.Context) {
+	ctx, span := telemetry.StartSpan(c.Request.Context(), "handler.booking.confirm")
+	defer span.End()
+	c.Request = c.Request.WithContext(ctx)
+
 	userID := c.GetString("user_id")
 	if userID == "" {
+		span.SetStatus(codes.Error, "unauthorized")
 		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
 			Error: "unauthorized",
 			Code:  "UNAUTHORIZED",
@@ -77,30 +104,48 @@ func (h *BookingHandler) ConfirmBooking(c *gin.Context) {
 
 	bookingID := c.Param("id")
 	if bookingID == "" {
+		span.SetStatus(codes.Error, "booking id required")
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
 			Error: "booking id required",
 			Code:  "INVALID_REQUEST",
 		})
 		return
 	}
+
+	span.SetAttributes(
+		attribute.String("booking_id", bookingID),
+		attribute.String("user_id", userID),
+	)
 
 	var req dto.ConfirmBookingRequest
 	// PaymentID is optional, so we don't fail if body is empty
 	_ = c.ShouldBindJSON(&req)
 
-	result, err := h.bookingService.ConfirmBooking(c.Request.Context(), bookingID, userID, &req)
+	if req.PaymentID != "" {
+		span.SetAttributes(attribute.String("payment_id", req.PaymentID))
+	}
+
+	result, err := h.bookingService.ConfirmBooking(ctx, bookingID, userID, &req)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		h.handleError(c, err)
 		return
 	}
 
+	span.SetStatus(codes.Ok, "")
 	c.JSON(http.StatusOK, result)
 }
 
 // ReleaseBooking handles DELETE /bookings/:id
 func (h *BookingHandler) ReleaseBooking(c *gin.Context) {
+	ctx, span := telemetry.StartSpan(c.Request.Context(), "handler.booking.release")
+	defer span.End()
+	c.Request = c.Request.WithContext(ctx)
+
 	userID := c.GetString("user_id")
 	if userID == "" {
+		span.SetStatus(codes.Error, "unauthorized")
 		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
 			Error: "unauthorized",
 			Code:  "UNAUTHORIZED",
@@ -110,6 +155,7 @@ func (h *BookingHandler) ReleaseBooking(c *gin.Context) {
 
 	bookingID := c.Param("id")
 	if bookingID == "" {
+		span.SetStatus(codes.Error, "booking id required")
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
 			Error: "booking id required",
 			Code:  "INVALID_REQUEST",
@@ -117,19 +163,32 @@ func (h *BookingHandler) ReleaseBooking(c *gin.Context) {
 		return
 	}
 
-	result, err := h.bookingService.ReleaseBooking(c.Request.Context(), bookingID, userID)
+	span.SetAttributes(
+		attribute.String("booking_id", bookingID),
+		attribute.String("user_id", userID),
+	)
+
+	result, err := h.bookingService.ReleaseBooking(ctx, bookingID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		h.handleError(c, err)
 		return
 	}
 
+	span.SetStatus(codes.Ok, "")
 	c.JSON(http.StatusOK, result)
 }
 
 // CancelBooking handles POST /bookings/:id/cancel
 func (h *BookingHandler) CancelBooking(c *gin.Context) {
+	ctx, span := telemetry.StartSpan(c.Request.Context(), "handler.booking.cancel")
+	defer span.End()
+	c.Request = c.Request.WithContext(ctx)
+
 	userID := c.GetString("user_id")
 	if userID == "" {
+		span.SetStatus(codes.Error, "unauthorized")
 		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
 			Error: "unauthorized",
 			Code:  "UNAUTHORIZED",
@@ -139,6 +198,7 @@ func (h *BookingHandler) CancelBooking(c *gin.Context) {
 
 	bookingID := c.Param("id")
 	if bookingID == "" {
+		span.SetStatus(codes.Error, "booking id required")
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
 			Error: "booking id required",
 			Code:  "INVALID_REQUEST",
@@ -146,19 +206,32 @@ func (h *BookingHandler) CancelBooking(c *gin.Context) {
 		return
 	}
 
-	result, err := h.bookingService.CancelBooking(c.Request.Context(), bookingID, userID)
+	span.SetAttributes(
+		attribute.String("booking_id", bookingID),
+		attribute.String("user_id", userID),
+	)
+
+	result, err := h.bookingService.CancelBooking(ctx, bookingID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		h.handleError(c, err)
 		return
 	}
 
+	span.SetStatus(codes.Ok, "")
 	c.JSON(http.StatusOK, result)
 }
 
 // GetBooking handles GET /bookings/:id
 func (h *BookingHandler) GetBooking(c *gin.Context) {
+	ctx, span := telemetry.StartSpan(c.Request.Context(), "handler.booking.get")
+	defer span.End()
+	c.Request = c.Request.WithContext(ctx)
+
 	userID := c.GetString("user_id")
 	if userID == "" {
+		span.SetStatus(codes.Error, "unauthorized")
 		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
 			Error: "unauthorized",
 			Code:  "UNAUTHORIZED",
@@ -168,6 +241,7 @@ func (h *BookingHandler) GetBooking(c *gin.Context) {
 
 	bookingID := c.Param("id")
 	if bookingID == "" {
+		span.SetStatus(codes.Error, "booking id required")
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
 			Error: "booking id required",
 			Code:  "INVALID_REQUEST",
@@ -175,19 +249,32 @@ func (h *BookingHandler) GetBooking(c *gin.Context) {
 		return
 	}
 
-	result, err := h.bookingService.GetBooking(c.Request.Context(), bookingID, userID)
+	span.SetAttributes(
+		attribute.String("booking_id", bookingID),
+		attribute.String("user_id", userID),
+	)
+
+	result, err := h.bookingService.GetBooking(ctx, bookingID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		h.handleError(c, err)
 		return
 	}
 
+	span.SetStatus(codes.Ok, "")
 	c.JSON(http.StatusOK, result)
 }
 
 // GetUserBookings handles GET /bookings
 func (h *BookingHandler) GetUserBookings(c *gin.Context) {
+	ctx, span := telemetry.StartSpan(c.Request.Context(), "handler.booking.list")
+	defer span.End()
+	c.Request = c.Request.WithContext(ctx)
+
 	userID := c.GetString("user_id")
 	if userID == "" {
+		span.SetStatus(codes.Error, "unauthorized")
 		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
 			Error: "unauthorized",
 			Code:  "UNAUTHORIZED",
@@ -209,19 +296,33 @@ func (h *BookingHandler) GetUserBookings(c *gin.Context) {
 		}
 	}
 
-	result, err := h.bookingService.GetUserBookings(c.Request.Context(), userID, page, pageSize)
+	span.SetAttributes(
+		attribute.String("user_id", userID),
+		attribute.Int("page", page),
+		attribute.Int("page_size", pageSize),
+	)
+
+	result, err := h.bookingService.GetUserBookings(ctx, userID, page, pageSize)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		h.handleError(c, err)
 		return
 	}
 
+	span.SetStatus(codes.Ok, "")
 	c.JSON(http.StatusOK, result)
 }
 
 // GetUserBookingSummary handles GET /bookings/summary
 func (h *BookingHandler) GetUserBookingSummary(c *gin.Context) {
+	ctx, span := telemetry.StartSpan(c.Request.Context(), "handler.booking.summary")
+	defer span.End()
+	c.Request = c.Request.WithContext(ctx)
+
 	userID := c.GetString("user_id")
 	if userID == "" {
+		span.SetStatus(codes.Error, "unauthorized")
 		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
 			Error: "unauthorized",
 			Code:  "UNAUTHORIZED",
@@ -231,6 +332,7 @@ func (h *BookingHandler) GetUserBookingSummary(c *gin.Context) {
 
 	eventID := c.Query("event_id")
 	if eventID == "" {
+		span.SetStatus(codes.Error, "event_id required")
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
 			Error:   "event_id required",
 			Code:    "INVALID_REQUEST",
@@ -239,17 +341,29 @@ func (h *BookingHandler) GetUserBookingSummary(c *gin.Context) {
 		return
 	}
 
-	result, err := h.bookingService.GetUserBookingSummary(c.Request.Context(), userID, eventID)
+	span.SetAttributes(
+		attribute.String("user_id", userID),
+		attribute.String("event_id", eventID),
+	)
+
+	result, err := h.bookingService.GetUserBookingSummary(ctx, userID, eventID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		h.handleError(c, err)
 		return
 	}
 
+	span.SetStatus(codes.Ok, "")
 	c.JSON(http.StatusOK, result)
 }
 
 // GetPendingBookings handles GET /bookings/pending
 func (h *BookingHandler) GetPendingBookings(c *gin.Context) {
+	ctx, span := telemetry.StartSpan(c.Request.Context(), "handler.booking.pending")
+	defer span.End()
+	c.Request = c.Request.WithContext(ctx)
+
 	// Parse limit parameter
 	limit := 100
 	if l := c.Query("limit"); l != "" {
@@ -258,12 +372,17 @@ func (h *BookingHandler) GetPendingBookings(c *gin.Context) {
 		}
 	}
 
-	result, err := h.bookingService.GetPendingBookings(c.Request.Context(), limit)
+	span.SetAttributes(attribute.Int("limit", limit))
+
+	result, err := h.bookingService.GetPendingBookings(ctx, limit)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		h.handleError(c, err)
 		return
 	}
 
+	span.SetStatus(codes.Ok, "")
 	c.JSON(http.StatusOK, dto.SuccessResponse{
 		Success: true,
 		Data:    result,

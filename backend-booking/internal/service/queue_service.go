@@ -12,6 +12,9 @@ import (
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-booking/internal/domain"
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-booking/internal/dto"
 	"github.com/prohmpiriya/booking-rush-10k-rps/backend-booking/internal/repository"
+	"github.com/prohmpiriya/booking-rush-10k-rps/pkg/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // QueueService defines the interface for queue business logic
@@ -91,16 +94,27 @@ func NewQueueService(
 
 // JoinQueue adds a user to the virtual queue for an event
 func (s *queueService) JoinQueue(ctx context.Context, userID string, req *dto.JoinQueueRequest) (*dto.JoinQueueResponse, error) {
+	ctx, span := telemetry.StartSpan(ctx, "service.queue.join")
+	defer span.End()
+
 	// Validate request
 	if req == nil {
+		span.SetStatus(codes.Error, "invalid event_id")
 		return nil, domain.ErrInvalidEventID
 	}
 	if req.EventID == "" {
+		span.SetStatus(codes.Error, "invalid event_id")
 		return nil, domain.ErrInvalidEventID
 	}
 	if userID == "" {
+		span.SetStatus(codes.Error, "invalid user_id")
 		return nil, domain.ErrInvalidUserID
 	}
+
+	span.SetAttributes(
+		attribute.String("user_id", userID),
+		attribute.String("event_id", req.EventID),
+	)
 
 	// Generate unique queue token
 	token := generateQueueToken()
@@ -116,16 +130,21 @@ func (s *queueService) JoinQueue(ctx context.Context, userID string, req *dto.Jo
 
 	result, err := s.queueRepo.JoinQueue(ctx, params)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
 	if !result.Success {
 		switch result.ErrorCode {
 		case "ALREADY_IN_QUEUE":
+			span.SetStatus(codes.Error, "already in queue")
 			return nil, domain.ErrAlreadyInQueue
 		case "QUEUE_FULL":
+			span.SetStatus(codes.Error, "queue full")
 			return nil, domain.ErrQueueFull
 		default:
+			span.SetStatus(codes.Error, "queue not open")
 			return nil, domain.ErrQueueNotOpen
 		}
 	}
@@ -134,6 +153,8 @@ func (s *queueService) JoinQueue(ctx context.Context, userID string, req *dto.Jo
 	estimatedWait := result.Position * s.estimatedWaitPerUser
 
 	now := time.Now()
+	span.SetAttributes(attribute.Int64("position", result.Position))
+	span.SetStatus(codes.Ok, "")
 	return &dto.JoinQueueResponse{
 		Position:      result.Position,
 		Token:         token,
@@ -146,20 +167,33 @@ func (s *queueService) JoinQueue(ctx context.Context, userID string, req *dto.Jo
 
 // GetPosition gets the user's current position in queue
 func (s *queueService) GetPosition(ctx context.Context, userID, eventID string) (*dto.QueuePositionResponse, error) {
+	ctx, span := telemetry.StartSpan(ctx, "service.queue.get_position")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("user_id", userID),
+		attribute.String("event_id", eventID),
+	)
+
 	// Validate inputs
 	if eventID == "" {
+		span.SetStatus(codes.Error, "invalid event_id")
 		return nil, domain.ErrInvalidEventID
 	}
 	if userID == "" {
+		span.SetStatus(codes.Error, "invalid user_id")
 		return nil, domain.ErrInvalidUserID
 	}
 
 	result, err := s.queueRepo.GetPosition(ctx, eventID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
 	if !result.IsInQueue {
+		span.SetStatus(codes.Error, "not in queue")
 		return nil, domain.ErrNotInQueue
 	}
 
@@ -206,30 +240,47 @@ func (s *queueService) GetPosition(ctx context.Context, userID, eventID string) 
 		response.QueuePassExpiresAt = queuePassExpiresAt
 	}
 
+	span.SetAttributes(attribute.Int64("position", result.Position))
+	span.SetStatus(codes.Ok, "")
 	return response, nil
 }
 
 // LeaveQueue removes a user from the queue
 func (s *queueService) LeaveQueue(ctx context.Context, userID string, req *dto.LeaveQueueRequest) (*dto.LeaveQueueResponse, error) {
+	ctx, span := telemetry.StartSpan(ctx, "service.queue.leave")
+	defer span.End()
+
 	// Validate inputs
 	if req == nil {
+		span.SetStatus(codes.Error, "invalid event_id")
 		return nil, domain.ErrInvalidEventID
 	}
 	if req.EventID == "" {
+		span.SetStatus(codes.Error, "invalid event_id")
 		return nil, domain.ErrInvalidEventID
 	}
 	if userID == "" {
+		span.SetStatus(codes.Error, "invalid user_id")
 		return nil, domain.ErrInvalidUserID
 	}
 	if req.Token == "" {
+		span.SetStatus(codes.Error, "invalid queue token")
 		return nil, domain.ErrInvalidQueueToken
 	}
 
+	span.SetAttributes(
+		attribute.String("user_id", userID),
+		attribute.String("event_id", req.EventID),
+	)
+
 	err := s.queueRepo.LeaveQueue(ctx, req.EventID, userID, req.Token)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
+	span.SetStatus(codes.Ok, "")
 	return &dto.LeaveQueueResponse{
 		Success: true,
 		Message: "Successfully left the queue",
@@ -238,16 +289,26 @@ func (s *queueService) LeaveQueue(ctx context.Context, userID string, req *dto.L
 
 // GetQueueStatus gets the queue status for an event
 func (s *queueService) GetQueueStatus(ctx context.Context, eventID string) (*dto.QueueStatusResponse, error) {
+	ctx, span := telemetry.StartSpan(ctx, "service.queue.get_status")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("event_id", eventID))
+
 	// Validate input
 	if eventID == "" {
+		span.SetStatus(codes.Error, "invalid event_id")
 		return nil, domain.ErrInvalidEventID
 	}
 
 	size, err := s.queueRepo.GetQueueSize(ctx, eventID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
+	span.SetAttributes(attribute.Int64("total_in_queue", size))
+	span.SetStatus(codes.Ok, "")
 	return &dto.QueueStatusResponse{
 		EventID:      eventID,
 		TotalInQueue: size,
