@@ -75,8 +75,8 @@ BEGIN
                 zone_colors[zone_idx],
                 zone_prices[zone_idx],
                 'THB',
-                20000,  -- 20,000 seats per zone
-                20000,  -- All available
+                250000,  -- 250,000 seats per zone
+                250000,  -- All available
                 1,
                 10,
                 true,

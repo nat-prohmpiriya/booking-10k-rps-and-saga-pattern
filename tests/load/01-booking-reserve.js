@@ -19,8 +19,22 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080/api/v1';
 const AUTH_EMAIL = __ENV.AUTH_EMAIL || 'loadtest1@test.com';
 const AUTH_PASSWORD = __ENV.AUTH_PASSWORD || 'Test123!';
 
-// Token will be set during setup
+// Token will be set during setup (fallback)
 let AUTH_TOKEN = __ENV.AUTH_TOKEN || '';
+
+// Load pre-generated tokens from JSON file (for multi-user testing)
+let userTokens = [];
+try {
+    userTokens = JSON.parse(open('./seed-data/tokens.json'));
+    console.log(`Loaded ${userTokens.length} pre-generated tokens`);
+} catch (e) {
+    console.log('No pre-generated tokens found, will use single token');
+}
+
+// SharedArray for tokens (memory efficient)
+const tokens = new SharedArray('tokens', function () {
+    return userTokens.length > 0 ? userTokens : [];
+});
 
 // Load test data from JSON file
 let testDataConfig;
@@ -39,21 +53,12 @@ try {
     };
 }
 
-// Generate user IDs if not provided
-const NUM_USERS = 10000;
-const userIdsArray = testDataConfig.userIds && testDataConfig.userIds.length > 0
-    ? testDataConfig.userIds
-    : Array.from({ length: NUM_USERS }, (_, i) => `load-test-user-${i + 1}`);
-
-// SharedArray requires returning an array
-const userIds = new SharedArray('user_ids', function () {
-    return userIdsArray;
-});
-
-// Direct arrays for event, show, and zone IDs (small enough to not need SharedArray)
+// Direct arrays for event, show, and zone IDs
 const eventIds = testDataConfig.eventIds;
 const showIds = testDataConfig.showIds || [];
 const zoneIds = testDataConfig.zoneIds;
+
+// Remove old userIds (now using tokens instead)
 
 // Get scenario from environment (default: run all)
 const SCENARIO = __ENV.SCENARIO || 'all';
@@ -141,12 +146,18 @@ export default function (data) {
 
 // Reserve seats function - receives data from setup()
 export function reserveSeats(data) {
-    // Get token from setup data
-    const token = data?.token || AUTH_TOKEN;
+    // Use pre-generated tokens if available, otherwise use single token from setup
+    let token, userId;
+    if (tokens.length > 0) {
+        const tokenIndex = randomIntBetween(0, tokens.length - 1);
+        const tokenData = tokens[tokenIndex];
+        token = tokenData.token;
+        userId = tokenData.user_id;
+    } else {
+        token = data?.token || AUTH_TOKEN;
+        userId = `a0000000-0000-0000-0000-000000000001`;
+    }
 
-    // SharedArray must be accessed by index
-    const userIndex = randomIntBetween(0, userIds.length - 1);
-    const userId = userIds[userIndex];
     const eventId = randomItem(eventIds);
     const showId = randomItem(showIds);
     const zoneId = randomItem(zoneIds);
@@ -165,7 +176,6 @@ export function reserveSeats(data) {
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
-            'X-User-ID': userId,
             'X-Idempotency-Key': idempotencyKey,
         },
         tags: { name: 'ReserveSeats' },
@@ -212,7 +222,7 @@ export function reserveSeats(data) {
 // Lifecycle functions
 export function setup() {
     console.log(`Starting load test against ${BASE_URL}`);
-    console.log(`Test data: ${eventIds.length} events, ${zoneIds.length} zones, ${userIds.length} users`);
+    console.log(`Test data: ${eventIds.length} events, ${zoneIds.length} zones, ${tokens.length} tokens`);
 
     // Login to get auth token if not provided via ENV
     let token = AUTH_TOKEN;
@@ -240,7 +250,7 @@ export function setup() {
     }
 
     // Verify API is reachable
-    const healthCheck = http.get(`${BASE_URL}/health`, {
+    const healthCheck = http.get('http://localhost:8080/health', {
         timeout: '10s',
     });
 
