@@ -151,9 +151,10 @@ func (p *KafkaEventPublisher) publishEvent(ctx context.Context, eventType domain
 		Timestamp: time.Now(),
 	}
 
-	// Use ProduceAsync to avoid blocking the booking request
+	// Use ProduceAsync with background context to avoid blocking the booking request
+	// and prevent "context canceled" errors when HTTP request completes before publish
 	// Error handling via callback - log but don't fail the request
-	p.producer.ProduceAsync(ctx, msg, func(err error) {
+	p.producer.ProduceAsync(context.Background(), msg, func(err error) {
 		if err != nil && p.logger != nil {
 			p.logger.Error(fmt.Sprintf("failed to publish %s event for booking %s: %v", eventType, booking.ID, err))
 		}

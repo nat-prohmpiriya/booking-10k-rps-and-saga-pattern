@@ -198,7 +198,26 @@ func (s *queueService) GetPosition(ctx context.Context, userID, eventID string) 
 		return nil, err
 	}
 
+	// If user is not in queue, check if they have a valid queue pass
+	// (Queue Release Worker may have already released them)
 	if !result.IsInQueue {
+		// Check if user has a queue pass in Redis
+		existingPass, err := s.queueRepo.GetQueuePass(ctx, eventID, userID)
+		if err == nil && existingPass != "" {
+			// User has a valid queue pass, return it
+			// Parse the JWT to get expiry time
+			queuePassExpiresAt := time.Now().Add(s.queuePassTTL)
+
+			return &dto.QueuePositionResponse{
+				Position:           0, // Already released from queue
+				TotalInQueue:       0,
+				EstimatedWait:      0,
+				IsReady:            true,
+				QueuePass:          existingPass,
+				QueuePassExpiresAt: queuePassExpiresAt,
+			}, nil
+		}
+
 		span.SetStatus(codes.Error, "not in queue")
 		return nil, domain.ErrNotInQueue
 	}

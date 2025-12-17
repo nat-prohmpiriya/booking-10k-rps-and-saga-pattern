@@ -266,6 +266,19 @@ func toFloat64(v interface{}) (float64, bool) {
 	}
 }
 
+// GetQueuePass retrieves the queue pass for a user (if exists)
+func (r *RedisQueueRepository) GetQueuePass(ctx context.Context, eventID, userID string) (string, error) {
+	key := fmt.Sprintf("queue:pass:%s:%s", eventID, userID)
+	queuePass, err := r.client.Get(ctx, key).Result()
+	if err != nil {
+		if err.Error() == "redis: nil" {
+			return "", nil // No queue pass found
+		}
+		return "", fmt.Errorf("failed to get queue pass: %w", err)
+	}
+	return queuePass, nil
+}
+
 // StoreQueuePass stores the queue pass token in Redis with TTL
 func (r *RedisQueueRepository) StoreQueuePass(ctx context.Context, eventID, userID, queuePass string, ttl int) error {
 	key := fmt.Sprintf("queue:pass:%s:%s", eventID, userID)

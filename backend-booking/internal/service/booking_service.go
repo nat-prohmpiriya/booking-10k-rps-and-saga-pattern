@@ -262,13 +262,8 @@ createBooking:
 		return nil, err
 	}
 
-	// Publish booking created event (async, don't block on failure)
-	go func() {
-		if pubErr := s.eventPublisher.PublishBookingCreated(context.Background(), booking); pubErr != nil {
-			// Log error but don't fail the request
-			// TODO: Add proper logging
-		}
-	}()
+	// Publish booking created event (ProduceAsync is non-blocking, no need for extra goroutine)
+	_ = s.eventPublisher.PublishBookingCreated(ctx, booking)
 
 	// Record metrics
 	metrics.RecordReservation(ctx, booking.EventID, userID, booking.ZoneID, booking.Quantity)
