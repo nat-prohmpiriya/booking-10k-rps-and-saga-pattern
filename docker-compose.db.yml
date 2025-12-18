@@ -40,7 +40,8 @@ services:
   redis:
     image: redis:8-alpine
     container_name: booking-rush-redis
-    command: redis-server --appendonly yes --requirepass redis123
+    # maxclients increased for 10K concurrent SSE connections (Per-User Pub/Sub)
+    command: redis-server --appendonly yes --requirepass redis123 --maxclients 20000
     ports:
       - "6379:6379"
     volumes:
