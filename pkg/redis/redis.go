@@ -420,3 +420,20 @@ func (c *Client) Scan(ctx context.Context, cursor uint64, match string, count in
 func (c *Client) Keys(ctx context.Context, pattern string) *redis.StringSliceCmd {
 	return c.client.Keys(ctx, pattern)
 }
+
+// --- Pub/Sub Operations ---
+
+// Publish publishes a message to a channel
+func (c *Client) Publish(ctx context.Context, channel string, message interface{}) *redis.IntCmd {
+	return c.client.Publish(ctx, channel, message)
+}
+
+// Subscribe subscribes to channels and returns a PubSub
+func (c *Client) Subscribe(ctx context.Context, channels ...string) *redis.PubSub {
+	return c.client.Subscribe(ctx, channels...)
+}
+
+// PSubscribe subscribes to channels matching patterns
+func (c *Client) PSubscribe(ctx context.Context, patterns ...string) *redis.PubSub {
+	return c.client.PSubscribe(ctx, patterns...)
+}
