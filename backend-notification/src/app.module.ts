@@ -4,6 +4,8 @@ import { MongooseModule } from '@nestjs/mongoose';
 import configuration from './config/configuration';
 import { HealthModule } from './modules/health/health.module';
 import { NotificationModule } from './modules/notification/notification.module';
+import { EmailModule } from './modules/email/email.module';
+import { KafkaModule } from './modules/kafka/kafka.module';
 
 @Module({
   imports: [
@@ -27,6 +29,12 @@ import { NotificationModule } from './modules/notification/notification.module';
 
     // Notification
     NotificationModule,
+
+    // Email
+    EmailModule,
+
+    // Kafka consumers
+    KafkaModule,
   ],
   controllers: [],
   providers: [],
