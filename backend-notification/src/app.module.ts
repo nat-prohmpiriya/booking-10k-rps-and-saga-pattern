@@ -6,6 +6,7 @@ import { HealthModule } from './modules/health/health.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { EmailModule } from './modules/email/email.module';
 import { KafkaModule } from './modules/kafka/kafka.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -35,6 +36,9 @@ import { KafkaModule } from './modules/kafka/kafka.module';
 
     // Kafka consumers
     KafkaModule,
+
+    // Analytics
+    AnalyticsModule,
   ],
   controllers: [],
   providers: [],
