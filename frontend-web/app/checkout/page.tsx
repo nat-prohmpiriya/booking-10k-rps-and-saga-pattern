@@ -501,10 +501,10 @@ function CheckoutContent() {
   // Loading state
   if (checkoutState === "loading" || checkoutState === "reserving" || checkoutState === "creating_intent") {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center" data-testid="checkout-loading">
         <div className="text-center space-y-4">
-          <div className="w-16 h-16 border-4 border-[#d4af37]/30 border-t-[#d4af37] rounded-full animate-spin mx-auto" />
-          <p className="text-gray-400">
+          <div className="w-16 h-16 border-4 border-[#d4af37]/30 border-t-[#d4af37] rounded-full animate-spin mx-auto" data-testid="checkout-loading-spinner" />
+          <p className="text-gray-400" data-testid="checkout-loading-message">
             {checkoutState === "loading" && "Loading checkout..."}
             {checkoutState === "reserving" && "Reserving your seats..."}
             {checkoutState === "creating_intent" && "Initializing payment..."}
@@ -519,7 +519,7 @@ function CheckoutContent() {
     const isMaxTicketsError = error?.toLowerCase().includes("maximum tickets")
 
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4" data-testid="checkout-error">
         {/* Background decorations */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-500/5 rounded-full blur-3xl" />
@@ -528,7 +528,7 @@ function CheckoutContent() {
 
         <div className="relative z-10 w-full max-w-lg">
           {/* Main Card */}
-          <Card className="bg-gradient-to-b from-[#1a1a1a] to-[#141414] border border-red-900/30 overflow-hidden">
+          <Card className="bg-gradient-to-b from-[#1a1a1a] to-[#141414] border border-red-900/30 overflow-hidden" data-testid="checkout-error-card">
             {/* Top accent line */}
             <div className="h-1 bg-gradient-to-r from-red-600 via-orange-500 to-red-600" />
 
@@ -626,13 +626,13 @@ function CheckoutContent() {
   // Timeout state
   if (checkoutState === "timeout") {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
-        <Card className="bg-[#1a1a1a] border-yellow-800 p-8 max-w-md text-center">
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4" data-testid="checkout-timeout">
+        <Card className="bg-[#1a1a1a] border-yellow-800 p-8 max-w-md text-center" data-testid="checkout-timeout-card">
           <div className="w-16 h-16 rounded-full border-2 border-yellow-500 flex items-center justify-center mx-auto mb-4">
             <Clock className="w-8 h-8 text-yellow-500" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Session Expired</h1>
-          <p className="text-gray-400 mb-6">
+          <h1 className="text-2xl font-bold text-white mb-2" data-testid="checkout-timeout-title">Session Expired</h1>
+          <p className="text-gray-400 mb-6" data-testid="checkout-timeout-message">
             Your reservation has timed out. Your seats have been released. Redirecting...
           </p>
         </Card>
@@ -643,15 +643,15 @@ function CheckoutContent() {
   // Success state
   if (checkoutState === "success") {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
-        <Card className="bg-[#1a1a1a] border-green-800 p-8 max-w-md text-center">
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4" data-testid="checkout-success">
+        <Card className="bg-[#1a1a1a] border-green-800 p-8 max-w-md text-center" data-testid="checkout-success-card">
           <div className="w-16 h-16 rounded-full border-2 border-green-500 flex items-center justify-center mx-auto mb-4">
             <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Payment Successful!</h1>
-          <p className="text-gray-400 mb-6">Redirecting to your booking confirmation...</p>
+          <h1 className="text-2xl font-bold text-white mb-2" data-testid="checkout-success-title">Payment Successful!</h1>
+          <p className="text-gray-400 mb-6" data-testid="checkout-success-message">Redirecting to your booking confirmation...</p>
         </Card>
       </div>
     )
@@ -660,10 +660,10 @@ function CheckoutContent() {
   // Processing state
   if (checkoutState === "processing") {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center" data-testid="checkout-processing">
         <div className="text-center space-y-4">
-          <div className="w-16 h-16 border-4 border-[#d4af37]/30 border-t-[#d4af37] rounded-full animate-spin mx-auto" />
-          <p className="text-gray-400">Confirming your payment...</p>
+          <div className="w-16 h-16 border-4 border-[#d4af37]/30 border-t-[#d4af37] rounded-full animate-spin mx-auto" data-testid="checkout-processing-spinner" />
+          <p className="text-gray-400" data-testid="checkout-processing-message">Confirming your payment...</p>
         </div>
       </div>
     )
@@ -671,21 +671,21 @@ function CheckoutContent() {
 
   // Ready state - main checkout form
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen bg-[#0a0a0a]" data-testid="checkout-page">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Checkout</h1>
-          <p className="mt-2 text-gray-400">Complete your booking securely</p>
+          <h1 className="text-3xl font-bold text-white" data-testid="checkout-title">Checkout</h1>
+          <p className="mt-2 text-gray-400" data-testid="checkout-subtitle">Complete your booking securely</p>
         </div>
 
         {/* Two Column Layout */}
         <div className="grid gap-8 lg:grid-cols-2">
           {/* Left Column - Order Summary */}
-          <div className="lg:order-1">
+          <div className="lg:order-1" data-testid="checkout-order-summary">
             <Card className="overflow-hidden border-0 bg-[#141414]">
               <div className="p-6">
-                <h2 className="mb-6 text-xl font-semibold text-white">Order Summary</h2>
+                <h2 className="mb-6 text-xl font-semibold text-white" data-testid="checkout-order-summary-title">Order Summary</h2>
 
                 {/* Event Image */}
                 {event?.banner_url && (
@@ -759,7 +759,7 @@ function CheckoutContent() {
 
                   <div className="flex justify-between text-lg font-bold text-white">
                     <span>Total</span>
-                    <span className="text-[#d4af37]">฿{orderSummary.total.toLocaleString()}</span>
+                    <span className="text-[#d4af37]" data-testid="checkout-total">฿{orderSummary.total.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
@@ -767,7 +767,7 @@ function CheckoutContent() {
           </div>
 
           {/* Right Column - Payment Section */}
-          <div className="lg:order-2">
+          <div className="lg:order-2" data-testid="checkout-payment-section">
             <Card className="border-0 bg-[#141414]">
               <div className="p-6">
                 {/* Countdown Timer */}
@@ -775,14 +775,15 @@ function CheckoutContent() {
                   className={`mb-6 flex items-center justify-center gap-2 rounded-lg p-4 ${
                     isUrgent ? "bg-red-950/50" : "bg-gray-800/50"
                   }`}
+                  data-testid="checkout-timer"
                 >
                   <Clock className={`h-5 w-5 ${isUrgent ? "text-red-400" : "text-gray-400"}`} />
-                  <span className={`font-mono text-lg font-semibold ${isUrgent ? "text-red-400" : "text-gray-300"}`}>
+                  <span className={`font-mono text-lg font-semibold ${isUrgent ? "text-red-400" : "text-gray-300"}`} data-testid="checkout-timer-value">
                     Complete in {formatTime(timeLeft)}
                   </span>
                 </div>
 
-                <h2 className="mb-6 text-xl font-semibold text-white">Payment Details</h2>
+                <h2 className="mb-6 text-xl font-semibold text-white" data-testid="checkout-payment-title">Payment Details</h2>
 
                 {/* Saved Payment Methods */}
                 {savedPaymentMethods.length > 0 && (
@@ -893,6 +894,7 @@ function CheckoutContent() {
                   variant="ghost"
                   onClick={handleCancel}
                   className="mt-3 w-full text-gray-400 hover:text-gray-300"
+                  data-testid="checkout-cancel-button"
                 >
                   Cancel and Release Seats
                 </Button>
