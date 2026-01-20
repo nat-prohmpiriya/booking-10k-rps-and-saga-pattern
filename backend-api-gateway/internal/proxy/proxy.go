@@ -252,10 +252,10 @@ func (rp *ReverseProxy) Handler() gin.HandlerFunc {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
+					// Log panic details for debugging
+					fmt.Printf("PANIC in proxy: %v\n", r)
 					span.SetStatus(codes.Error, fmt.Sprintf("panic: %v", r))
 					span.RecordError(fmt.Errorf("panic: %v", r))
-					// Can't use c.JSON as writer may be partially written
-					// Just log the panic for now
 				}
 			}()
 			proxy.ServeHTTP(c.Writer, c.Request)
