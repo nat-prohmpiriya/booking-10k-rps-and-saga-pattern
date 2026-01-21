@@ -19,7 +19,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: payment-service
-          image: ghcr.io/nat-prohmpiriya/booking-rush/payment-service:99a168a
+          image: ghcr.io/nat-prohmpiriya/booking-rush/payment-service:14731f3
           imagePullPolicy: Always
           ports:
             - containerPort: 8084
